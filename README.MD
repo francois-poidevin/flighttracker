@@ -124,6 +124,11 @@ CMD ["mongod"]
 FROM gcr.io/distroless/base
 ```
 
+## Build
+```
+go build -o bin/flighttracker
+```
+
 ## Run
 
 Do that trought a docker-compose that launch the mongoDB docker image, then start the prog in distroless image
