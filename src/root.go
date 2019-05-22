@@ -10,8 +10,9 @@ import (
 	"time"
 )
 
+//FlightData - storage structure for flightRadar24 API response
 type FlightData struct {
-	flightId         int
+	flightID         int
 	iCAO24BITADDRESS string
 	lat              float32
 	lon              float32
