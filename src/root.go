@@ -2,11 +2,13 @@ package src
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 	"time"
 )
 
@@ -51,8 +53,9 @@ func storeDataOnFile(t time.Time) {
 	defer f.Close()
 	w := bufio.NewWriter(f)
 
-	//Made the HTTP request
-	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.79,43.53,1.23,2.03&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
+	// Made the HTTP request - Test area 43.663712,1.570358,43.710510,1.700735
+	// Toulouse and Airport Aera - 43.515693,1.318359,43.702630,1.687775
+	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.70,43.51,1.31,1.68&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
 	if errHTTPGet != nil {
 		panic(errHTTPGet)
 	}
@@ -63,7 +66,9 @@ func storeDataOnFile(t time.Time) {
 		panic(errRead)
 	}
 
-	fmt.Println(string(body))
+	unMarshalByte(body)
+
+	// fmt.Println(string(body))
 
 	n4, errWS := w.WriteString(t.String() + "\n" + string(body) + "\n====================================\n")
 	if errWS != nil {
@@ -71,4 +76,27 @@ func storeDataOnFile(t time.Time) {
 	}
 	w.Flush()
 	fmt.Printf("wrote %d bytes\n", n4)
+}
+
+func unMarshalByte(byt []byte) []FlightData {
+
+	var data map[string]interface{}
+
+	if err := json.Unmarshal(byt, &data); err != nil {
+		panic(err)
+	}
+
+	for k, v := range data {
+		if k != "full_count" && k != "version" && k != "stats" {
+			fmt.Println("key: " + k)
+			fmt.Println(fmt.Sprintf("value: %v", v))
+			if reflect.TypeOf(v).Kind() == reflect.Slice {
+				fmt.Println("it's a slice !!!")
+			}
+		}
+	}
+
+	// fmt.Println(data)
+
+	return nil
 }
