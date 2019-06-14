@@ -9,29 +9,30 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strconv"
 	"time"
 )
 
 //FlightData - storage structure for flightRadar24 API response
 type FlightData struct {
-	flightID         int
+	flightID         string
 	iCAO24BITADDRESS string
-	lat              float32
-	lon              float32
-	track            int //degree to the destination
-	altitude         int
-	groundSpeed      int    //kts
+	lat              float64
+	lon              float64
+	track            int64 //degree to the destination
+	altitude         int64
+	groundSpeed      int64  //kts
 	unknown1         string //not describe yet
 	transpondeurType string
 	aircraftType     string
 	immatriculation1 string
-	timeStamp        uint
+	timeStamp        uint64
 	origine          string
 	destination      string
 	unknown2         string
-	verticalSpeed    int
+	verticalSpeed    int64
 	immatriculation2 string
-	unknown3         int
+	unknown3         int64
 	company          string
 }
 
@@ -81,7 +82,7 @@ func storeDataOnFile(t time.Time) {
 func unMarshalByte(byt []byte) []FlightData {
 
 	var data map[string]interface{}
-
+	var result []FlightData
 	if err := json.Unmarshal(byt, &data); err != nil {
 		panic(err)
 	}
@@ -91,12 +92,50 @@ func unMarshalByte(byt []byte) []FlightData {
 			fmt.Println("key: " + k)
 			fmt.Println(fmt.Sprintf("value: %v", v))
 			if reflect.TypeOf(v).Kind() == reflect.Slice {
+				s := reflect.ValueOf(v)
 				fmt.Println("it's a slice !!!")
+				for i := 0; i < s.Len(); i++ {
+					fmt.Println(s.Index(i))
+				}
+				_lat, _ := strconv.ParseFloat(s.Index(1).String(), 64)
+				_lon, _ := strconv.ParseFloat(s.Index(2).String(), 64)
+				_track, _ := strconv.ParseInt(s.Index(3).String(), 10, 64)
+				_altitude, _ := strconv.ParseInt(s.Index(4).String(), 10, 64)
+				_groundSpeed, _ := strconv.ParseInt(s.Index(5).String(), 10, 64)
+
+				_timeStamp, _ := strconv.ParseUint(s.Index(10).String(), 10, 64)
+
+				_verticalSpeed, _ := strconv.ParseInt(s.Index(14).String(), 10, 64)
+
+				_unknown3, _ := strconv.ParseInt(s.Index(16).String(), 10, 64)
+
+				flightData := FlightData{
+					flightID:         k,
+					iCAO24BITADDRESS: s.Index(0).String(),
+					lat:              _lat,
+					lon:              _lon,
+					track:            _track,
+					altitude:         _altitude,
+					groundSpeed:      _groundSpeed,
+					unknown1:         s.Index(6).String(),
+					transpondeurType: s.Index(7).String(),
+					aircraftType:     s.Index(8).String(),
+					immatriculation1: s.Index(9).String(),
+					timeStamp:        _timeStamp,
+					origine:          s.Index(11).String(),
+					destination:      s.Index(12).String(),
+					unknown2:         s.Index(13).String(),
+					verticalSpeed:    _verticalSpeed,
+					immatriculation2: s.Index(15).String(),
+					unknown3:         _unknown3,
+					company:          s.Index(17).String(),
+				}
+				result = append(result, flightData)
 			}
 		}
 	}
 
-	// fmt.Println(data)
+	// fmt.Println(result)
 
-	return nil
+	return result
 }
