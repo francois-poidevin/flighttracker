@@ -67,9 +67,15 @@ func storeDataOnFile(t time.Time) {
 		panic(errRead)
 	}
 
-	unMarshalByte(body)
+	data := unMarshalByte(body)
 
-	// fmt.Println(string(body))
+	for i := 0; i < len(data); i++ {
+		fmt.Println("aircraftType " + data[i].aircraftType)
+		fmt.Println("immatriculation1 " + data[i].immatriculation1)
+		fmt.Println("origine " + data[i].origine)
+		fmt.Println("destination " + data[i].destination)
+		fmt.Println("Altitude " + fmt.Sprintf("%v", data[i].altitude))
+	}
 
 	n4, errWS := w.WriteString(t.String() + "\n" + string(body) + "\n====================================\n")
 	if errWS != nil {
@@ -93,42 +99,38 @@ func unMarshalByte(byt []byte) []FlightData {
 			fmt.Println(fmt.Sprintf("value: %v", v))
 			if reflect.TypeOf(v).Kind() == reflect.Slice {
 				s := reflect.ValueOf(v)
-				fmt.Println("it's a slice !!!")
-				for i := 0; i < s.Len(); i++ {
-					fmt.Println(s.Index(i))
-				}
-				_lat, _ := strconv.ParseFloat(s.Index(1).String(), 64)
-				_lon, _ := strconv.ParseFloat(s.Index(2).String(), 64)
-				_track, _ := strconv.ParseInt(s.Index(3).String(), 10, 64)
-				_altitude, _ := strconv.ParseInt(s.Index(4).String(), 10, 64)
-				_groundSpeed, _ := strconv.ParseInt(s.Index(5).String(), 10, 64)
+				_lat, _ := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(1)), 64)
+				_lon, _ := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(2)), 64)
+				_track, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(3)), 10, 64)
+				_altitude, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(4)), 10, 64)
+				_groundSpeed, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(5)), 10, 64)
 
-				_timeStamp, _ := strconv.ParseUint(s.Index(10).String(), 10, 64)
+				_timeStamp, _ := strconv.ParseUint(fmt.Sprintf("%v", s.Index(10)), 10, 64)
 
-				_verticalSpeed, _ := strconv.ParseInt(s.Index(14).String(), 10, 64)
+				_verticalSpeed, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(14)), 10, 64)
 
-				_unknown3, _ := strconv.ParseInt(s.Index(16).String(), 10, 64)
+				_unknown3, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(16)), 10, 64)
 
 				flightData := FlightData{
 					flightID:         k,
-					iCAO24BITADDRESS: s.Index(0).String(),
+					iCAO24BITADDRESS: fmt.Sprintf("%v", s.Index(0)),
 					lat:              _lat,
 					lon:              _lon,
 					track:            _track,
 					altitude:         _altitude,
 					groundSpeed:      _groundSpeed,
-					unknown1:         s.Index(6).String(),
-					transpondeurType: s.Index(7).String(),
-					aircraftType:     s.Index(8).String(),
-					immatriculation1: s.Index(9).String(),
+					unknown1:         fmt.Sprintf("%v", s.Index(6)),
+					transpondeurType: fmt.Sprintf("%v", s.Index(7)),
+					aircraftType:     fmt.Sprintf("%v", s.Index(8)),
+					immatriculation1: fmt.Sprintf("%v", s.Index(9)),
 					timeStamp:        _timeStamp,
-					origine:          s.Index(11).String(),
-					destination:      s.Index(12).String(),
-					unknown2:         s.Index(13).String(),
+					origine:          fmt.Sprintf("%v", s.Index(11)),
+					destination:      fmt.Sprintf("%v", s.Index(12)),
+					unknown2:         fmt.Sprintf("%v", s.Index(13)),
 					verticalSpeed:    _verticalSpeed,
-					immatriculation2: s.Index(15).String(),
+					immatriculation2: fmt.Sprintf("%v", s.Index(15)),
 					unknown3:         _unknown3,
-					company:          s.Index(17).String(),
+					company:          fmt.Sprintf("%v", s.Index(17)),
 				}
 				result = append(result, flightData)
 			}
