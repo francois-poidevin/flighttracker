@@ -40,27 +40,35 @@ type FlightData struct {
 func Execute() {
 	//Loop each 5 secondes for working
 	d := 5 * time.Second
-	for x := range time.Tick(d) {
-		storeDataOnFile(x)
-	}
-}
-
-func storeDataOnFile(t time.Time) {
 	f, err := os.OpenFile("data.log",
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println(err)
 	}
-	defer f.Close()
+	for x := range time.Tick(d) {
+		storeDataOnFile(x, f)
+	}
+
+	defer func() {
+		f.Close()
+		fmt.Println("Close")
+	}()
+}
+
+func storeDataOnFile(t time.Time, f *os.File) {
+
 	w := bufio.NewWriter(f)
 
 	// Made the HTTP request - Test area 43.663712,1.570358,43.710510,1.700735
-	// Toulouse and Airport Aera - 43.515693,1.318359,43.702630,1.687775
+	// Toulouse and Airport Area - 43.515693,1.318359,43.702630,1.687775
 	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.70,43.51,1.31,1.68&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
 	if errHTTPGet != nil {
 		panic(errHTTPGet)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		resp.Body.Close()
+		w.Flush()
+	}()
 
 	body, errRead := ioutil.ReadAll(resp.Body)
 	if errRead != nil {
@@ -81,7 +89,6 @@ func storeDataOnFile(t time.Time) {
 	if errWS != nil {
 		panic(errWS)
 	}
-	w.Flush()
 	fmt.Printf("wrote %d bytes\n", n4)
 }
 
@@ -99,17 +106,38 @@ func unMarshalByte(byt []byte) []FlightData {
 			fmt.Println(fmt.Sprintf("value: %v", v))
 			if reflect.TypeOf(v).Kind() == reflect.Slice {
 				s := reflect.ValueOf(v)
-				_lat, _ := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(1)), 64)
-				_lon, _ := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(2)), 64)
-				_track, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(3)), 10, 64)
-				_altitude, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(4)), 10, 64)
-				_groundSpeed, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(5)), 10, 64)
-
-				_timeStamp, _ := strconv.ParseUint(fmt.Sprintf("%v", s.Index(10)), 10, 64)
-
-				_verticalSpeed, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(14)), 10, 64)
-
-				_unknown3, _ := strconv.ParseInt(fmt.Sprintf("%v", s.Index(16)), 10, 64)
+				_lat, err := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(1)), 64)
+				if err != nil {
+					fmt.Println("Error in parsing _lat : " + err.Error())
+				}
+				_lon, err := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(2)), 64)
+				if err != nil {
+					fmt.Println("Error in parsing _lon : " + err.Error())
+				}
+				_track, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(3)), 10, 64)
+				if err != nil {
+					fmt.Println("Error in parsing _track : " + err.Error())
+				}
+				_altitude, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(4)), 10, 64)
+				if err != nil {
+					fmt.Println("Error in parsing _altitude : " + err.Error())
+				}
+				_groundSpeed, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(5)), 10, 64)
+				if err != nil {
+					fmt.Println("Error in parsing _groundSpeed : " + err.Error())
+				}
+				_timeStamp, err := strconv.ParseUint(fmt.Sprintf("%v", s.Index(10)), 10, 64)
+				if err != nil {
+					fmt.Println("Error in parsing _timeStamp : " + err.Error())
+				}
+				_verticalSpeed, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(14)), 10, 64)
+				if err != nil {
+					fmt.Println("Error in parsing _verticalSpeed : " + err.Error())
+				}
+				_unknown3, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(16)), 10, 64)
+				if err != nil {
+					fmt.Println("Error in parsing _unknown3 : " + err.Error())
+				}
 
 				flightData := FlightData{
 					flightID:         k,
