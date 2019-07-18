@@ -47,15 +47,19 @@ type FlightData struct {
 	transpondeurType string
 	aircraftType     string
 	immatriculation1 string
-	timeStamp        uint64
+	timeStamp        float64
 	origine          string
 	destination      string
 	unknown2         string
 	verticalSpeed    int64
 	immatriculation2 string
-	unknown3         int64
+	unknown3         string
 	company          string
 }
+
+const (
+	feetMeter = 0.3048
+)
 
 //Execute - start the worker
 func Execute() {
@@ -118,7 +122,8 @@ func storeDataOnFile(ctx context.Context, t time.Time, f *os.File) error {
 		log.For(ctx).Info("immatriculation1", zap.String("immat", data[i].immatriculation1))
 		log.For(ctx).Info("origine", zap.String("ORIGIN", data[i].origine))
 		log.For(ctx).Info("destination", zap.String("DEST", data[i].destination))
-		log.For(ctx).Info("Altitude", zap.Int64("Alt", data[i].altitude))
+		log.For(ctx).Info("Altitude", zap.Int64("Feet", data[i].altitude))
+		log.For(ctx).Info("Altitude", zap.Float64("meters", float64(data[i].altitude)*feetMeter))
 	}
 
 	n4, errWS := w.WriteString(t.String() + "\n" + string(body) + "\n====================================\n")
@@ -162,17 +167,13 @@ func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
 				if err != nil {
 					log.For(ctx).Error("Error in parsing _groundSpeed :", zap.Error(err))
 				}
-				_timeStamp, err := strconv.ParseUint(fmt.Sprintf("%v", s.Index(10)), 10, 64)
+				_timeStamp, err := strconv.ParseFloat(fmt.Sprintf("%f", s.Index(10)), 64)
 				if err != nil {
 					log.For(ctx).Error("Error in parsing _timeStamp :", zap.Error(err))
 				}
 				_verticalSpeed, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(14)), 10, 64)
 				if err != nil {
 					log.For(ctx).Error("Error in parsing _verticalSpeed :", zap.Error(err))
-				}
-				_unknown3, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(16)), 10, 64)
-				if err != nil {
-					log.For(ctx).Error("Error in parsing _unknown3 :", zap.Error(err))
 				}
 
 				flightData := FlightData{
@@ -193,7 +194,7 @@ func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
 					unknown2:         fmt.Sprintf("%v", s.Index(13)),
 					verticalSpeed:    _verticalSpeed,
 					immatriculation2: fmt.Sprintf("%v", s.Index(15)),
-					unknown3:         _unknown3,
+					unknown3:         fmt.Sprintf("%v", s.Index(16)),
 					company:          fmt.Sprintf("%v", s.Index(17)),
 				}
 				result = append(result, flightData)
