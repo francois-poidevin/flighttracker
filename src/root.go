@@ -1,16 +1,37 @@
+/*
+ * Copyright (C) Continental Automotive GmbH 2019
+ * Alle Rechte vorbehalten. All Rights Reserved.
+ * The reproduction, transmission or use of this document or its contents is not
+ * permitted without express written authority. Offenders will be liable for
+ * damages. All rights, including rights created by patent grant or registration of
+ * a utility model or design, are reserved.
+ */
+
+/*
+ * Copyright (C) Continental Automotive GmbH 2019
+ * Alle Rechte vorbehalten. All Rights Reserved.
+ * The reproduction, transmission or use of this document or its contents is not
+ * permitted without express written authority. Offenders will be liable for
+ * damages. All rights, including rights created by patent grant or registration of
+ * a utility model or design, are reserved.
+ */
+
 package src
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"reflect"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
+	"go.zenithar.org/pkg/log"
 )
 
 //FlightData - storage structure for flightRadar24 API response
@@ -38,24 +59,35 @@ type FlightData struct {
 
 //Execute - start the worker
 func Execute() {
+	ctx := context.Background()
+
+	log.For(ctx).Info("START")
+
 	//Loop each 5 secondes for working
 	d := 5 * time.Second
 	f, err := os.OpenFile("data.log",
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Println(err)
+		log.For(ctx).Error("Unable to Open file", zap.Error(err))
 	}
 	for x := range time.Tick(d) {
-		storeDataOnFile(x, f)
+		errStore := storeDataOnFile(ctx, x, f)
+		if errStore != nil {
+			log.For(ctx).Error("Unable to store data", zap.Error(errStore))
+		}
 	}
 
 	defer func() {
-		f.Close()
-		fmt.Println("Close")
+		errCloseFile := f.Close()
+		if errCloseFile != nil {
+			log.For(ctx).Error("unable to close file", zap.Error(errCloseFile))
+		}
+
+		log.For(ctx).Info("END")
 	}()
 }
 
-func storeDataOnFile(t time.Time, f *os.File) {
+func storeDataOnFile(ctx context.Context, t time.Time, f *os.File) error {
 
 	w := bufio.NewWriter(f)
 
@@ -63,7 +95,7 @@ func storeDataOnFile(t time.Time, f *os.File) {
 	// Toulouse and Airport Area - 43.515693,1.318359,43.702630,1.687775
 	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.70,43.51,1.31,1.68&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
 	if errHTTPGet != nil {
-		panic(errHTTPGet)
+		return errHTTPGet
 	}
 	defer func() {
 		resp.Body.Close()
@@ -72,71 +104,75 @@ func storeDataOnFile(t time.Time, f *os.File) {
 
 	body, errRead := ioutil.ReadAll(resp.Body)
 	if errRead != nil {
-		panic(errRead)
+		return errRead
 	}
 
-	data := unMarshalByte(body)
+	data, errUnMarshal := unMarshalByte(ctx, body)
+
+	if errUnMarshal != nil {
+		return errUnMarshal
+	}
 
 	for i := 0; i < len(data); i++ {
-		fmt.Println("aircraftType " + data[i].aircraftType)
-		fmt.Println("immatriculation1 " + data[i].immatriculation1)
-		fmt.Println("origine " + data[i].origine)
-		fmt.Println("destination " + data[i].destination)
-		fmt.Println("Altitude " + fmt.Sprintf("%v", data[i].altitude))
+		log.For(ctx).Info("aircraftType", zap.String("Type", data[i].aircraftType))
+		log.For(ctx).Info("immatriculation1", zap.String("immat", data[i].immatriculation1))
+		log.For(ctx).Info("origine", zap.String("ORIGIN", data[i].origine))
+		log.For(ctx).Info("destination", zap.String("DEST", data[i].destination))
+		log.For(ctx).Info("Altitude", zap.Int64("Alt", data[i].altitude))
 	}
 
 	n4, errWS := w.WriteString(t.String() + "\n" + string(body) + "\n====================================\n")
 	if errWS != nil {
-		panic(errWS)
+		return errWS
 	}
-	fmt.Printf("wrote %d bytes\n", n4)
+	log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
+	return nil
 }
 
-func unMarshalByte(byt []byte) []FlightData {
+func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
 
 	var data map[string]interface{}
 	var result []FlightData
 	if err := json.Unmarshal(byt, &data); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	for k, v := range data {
 		if k != "full_count" && k != "version" && k != "stats" {
-			fmt.Println("key: " + k)
-			fmt.Println(fmt.Sprintf("value: %v", v))
+			log.For(ctx).Info("Data key/value", zap.Any("value", v))
 			if reflect.TypeOf(v).Kind() == reflect.Slice {
 				s := reflect.ValueOf(v)
 				_lat, err := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(1)), 64)
 				if err != nil {
-					fmt.Println("Error in parsing _lat : " + err.Error())
+					log.For(ctx).Error("Error in parsing _lat :", zap.Error(err))
 				}
 				_lon, err := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(2)), 64)
 				if err != nil {
-					fmt.Println("Error in parsing _lon : " + err.Error())
+					log.For(ctx).Error("Error in parsing _lon :", zap.Error(err))
 				}
 				_track, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(3)), 10, 64)
 				if err != nil {
-					fmt.Println("Error in parsing _track : " + err.Error())
+					log.For(ctx).Error("Error in parsing _track :", zap.Error(err))
 				}
 				_altitude, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(4)), 10, 64)
 				if err != nil {
-					fmt.Println("Error in parsing _altitude : " + err.Error())
+					log.For(ctx).Error("Error in parsing _altitude :", zap.Error(err))
 				}
 				_groundSpeed, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(5)), 10, 64)
 				if err != nil {
-					fmt.Println("Error in parsing _groundSpeed : " + err.Error())
+					log.For(ctx).Error("Error in parsing _groundSpeed :", zap.Error(err))
 				}
 				_timeStamp, err := strconv.ParseUint(fmt.Sprintf("%v", s.Index(10)), 10, 64)
 				if err != nil {
-					fmt.Println("Error in parsing _timeStamp : " + err.Error())
+					log.For(ctx).Error("Error in parsing _timeStamp :", zap.Error(err))
 				}
 				_verticalSpeed, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(14)), 10, 64)
 				if err != nil {
-					fmt.Println("Error in parsing _verticalSpeed : " + err.Error())
+					log.For(ctx).Error("Error in parsing _verticalSpeed :", zap.Error(err))
 				}
 				_unknown3, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(16)), 10, 64)
 				if err != nil {
-					fmt.Println("Error in parsing _unknown3 : " + err.Error())
+					log.For(ctx).Error("Error in parsing _unknown3 :", zap.Error(err))
 				}
 
 				flightData := FlightData{
@@ -165,7 +201,5 @@ func unMarshalByte(byt []byte) []FlightData {
 		}
 	}
 
-	// fmt.Println(result)
-
-	return result
+	return result, nil
 }
