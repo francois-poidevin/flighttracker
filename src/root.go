@@ -20,6 +20,7 @@ package src
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,25 +37,25 @@ import (
 
 //FlightData - storage structure for flightRadar24 API response
 type FlightData struct {
-	flightID         string
-	iCAO24BITADDRESS string
-	lat              float64
-	lon              float64
-	track            int64 //degree to the destination
-	altitude         int64
-	groundSpeed      int64  //kts
-	unknown1         string //not describe yet
-	transpondeurType string
-	aircraftType     string
-	immatriculation1 string
-	timeStamp        float64
-	origine          string
-	destination      string
-	unknown2         string
-	verticalSpeed    int64
-	immatriculation2 string
-	unknown3         string
-	company          string
+	FlightID         string  `json:"flightID"`
+	ICAO24BITADDRESS string  `json:"ICAO24BITADDRESS"`
+	Lat              float64 `json:"Lat"`
+	Lon              float64 `json:"Lon"`
+	Track            int64   `json:"Track"` //degree to the destination
+	Altitude         int64   `json:"Altitude"`
+	GroundSpeed      int64   `json:"GroundSpeed"` //kts
+	Unknown1         string  `json:"Unknown1"`    //not describe yet
+	TranspondeurType string  `json:"TranspondeurType"`
+	AircraftType     string  `json:"AircraftType"`
+	Immatriculation1 string  `json:"Immatriculation1"`
+	TimeStamp        float64 `json:"TimeStamp"`
+	Origine          string  `json:"Origine"`
+	Destination      string  `json:"Destination"`
+	Unknown2         string  `json:"Unknown2"`
+	VerticalSpeed    int64   `json:"VerticalSpeed"`
+	Immatriculation2 string  `json:"Immatriculation2"`
+	Unknown3         string  `json:"Unknown3"`
+	Company          string  `json:"Company"`
 }
 
 const (
@@ -117,20 +118,43 @@ func storeDataOnFile(ctx context.Context, t time.Time, f *os.File) error {
 		return errUnMarshal
 	}
 
-	for i := 0; i < len(data); i++ {
-		log.For(ctx).Info("aircraftType", zap.String("Type", data[i].aircraftType))
-		log.For(ctx).Info("immatriculation1", zap.String("immat", data[i].immatriculation1))
-		log.For(ctx).Info("origine", zap.String("ORIGIN", data[i].origine))
-		log.For(ctx).Info("destination", zap.String("DEST", data[i].destination))
-		log.For(ctx).Info("Altitude", zap.Int64("Feet", data[i].altitude))
-		log.For(ctx).Info("Altitude", zap.Float64("meters", float64(data[i].altitude)*feetMeter))
+	var buffer bytes.Buffer
+	var IllegalFlight []FlightData
+	for _, dataObj := range data {
+		log.For(ctx).Info("========All Flights seen=============")
+		log.For(ctx).Info("Aircraft",
+			zap.String("aircraftType", dataObj.AircraftType),
+			zap.String("immatriculation1", dataObj.Immatriculation1),
+			zap.String("origine", dataObj.Origine),
+			zap.String("destination", dataObj.Destination),
+			zap.Int64("Altitude feets", dataObj.Altitude),
+			zap.Float64("Altitude meters", float64(dataObj.Altitude)*feetMeter))
+		//found flight above 500 meters
+		if (float64(dataObj.Altitude)*feetMeter) < float64(500) &&
+			(float64(dataObj.Altitude)*feetMeter) > float64(0) &&
+			dataObj.GroundSpeed > 0 {
+			IllegalFlight = append(IllegalFlight, dataObj)
+		}
+	}
+	if len(IllegalFlight) > 0 {
+		Marshal, err := json.Marshal(IllegalFlight)
+		if err != nil {
+			return err
+		}
+		buffer.Write(Marshal)
+		n4, errWS := w.WriteString(t.String() + "\n" + buffer.String() + "\n====================================\n")
+		if errWS != nil {
+			return errWS
+		}
+		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
+	} else {
+		n4, errWS := w.WriteString(t.String() + "\n" + "No Illegal Flight" + "\n====================================\n")
+		if errWS != nil {
+			return errWS
+		}
+		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
 	}
 
-	n4, errWS := w.WriteString(t.String() + "\n" + string(body) + "\n====================================\n")
-	if errWS != nil {
-		return errWS
-	}
-	log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
 	return nil
 }
 
@@ -177,25 +201,25 @@ func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
 				}
 
 				flightData := FlightData{
-					flightID:         k,
-					iCAO24BITADDRESS: fmt.Sprintf("%v", s.Index(0)),
-					lat:              _lat,
-					lon:              _lon,
-					track:            _track,
-					altitude:         _altitude,
-					groundSpeed:      _groundSpeed,
-					unknown1:         fmt.Sprintf("%v", s.Index(6)),
-					transpondeurType: fmt.Sprintf("%v", s.Index(7)),
-					aircraftType:     fmt.Sprintf("%v", s.Index(8)),
-					immatriculation1: fmt.Sprintf("%v", s.Index(9)),
-					timeStamp:        _timeStamp,
-					origine:          fmt.Sprintf("%v", s.Index(11)),
-					destination:      fmt.Sprintf("%v", s.Index(12)),
-					unknown2:         fmt.Sprintf("%v", s.Index(13)),
-					verticalSpeed:    _verticalSpeed,
-					immatriculation2: fmt.Sprintf("%v", s.Index(15)),
-					unknown3:         fmt.Sprintf("%v", s.Index(16)),
-					company:          fmt.Sprintf("%v", s.Index(17)),
+					FlightID:         k,
+					ICAO24BITADDRESS: fmt.Sprintf("%v", s.Index(0)),
+					Lat:              _lat,
+					Lon:              _lon,
+					Track:            _track,
+					Altitude:         _altitude,
+					GroundSpeed:      _groundSpeed,
+					Unknown1:         fmt.Sprintf("%v", s.Index(6)),
+					TranspondeurType: fmt.Sprintf("%v", s.Index(7)),
+					AircraftType:     fmt.Sprintf("%v", s.Index(8)),
+					Immatriculation1: fmt.Sprintf("%v", s.Index(9)),
+					TimeStamp:        _timeStamp,
+					Origine:          fmt.Sprintf("%v", s.Index(11)),
+					Destination:      fmt.Sprintf("%v", s.Index(12)),
+					Unknown2:         fmt.Sprintf("%v", s.Index(13)),
+					VerticalSpeed:    _verticalSpeed,
+					Immatriculation2: fmt.Sprintf("%v", s.Index(15)),
+					Unknown3:         fmt.Sprintf("%v", s.Index(16)),
+					Company:          fmt.Sprintf("%v", s.Index(17)),
 				}
 				result = append(result, flightData)
 			}
