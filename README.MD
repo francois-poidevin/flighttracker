@@ -131,6 +131,10 @@ go build -o bin/flighttracker
 
 ## Run
 
+```
+./bin/flighttracker start --bbox 43.52,1.32^43.70,1.69
+```
+
 Do that trought a docker-compose that launch the mongoDB docker image, then start the prog in distroless image
 
 

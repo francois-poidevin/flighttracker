@@ -45,10 +45,12 @@ const (
 )
 
 //Execute - start the worker
-func Execute() {
+func Execute(bbox string) {
 	ctx := context.Background()
 
-	log.For(ctx).Info("START")
+	log.For(ctx).Info("START with param: " + bbox)
+
+	//TODO: Deal with the boundingbox parameter
 
 	//Loop each 5 secondes for working
 	d := 5 * time.Second
