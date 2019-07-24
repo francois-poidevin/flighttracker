@@ -45,7 +45,7 @@ const (
 )
 
 //Execute - start the worker
-func Execute(bbox string) {
+func Execute(bbox string, refreshTime int) {
 	ctx := context.Background()
 
 	log.For(ctx).Info("START with param: " + bbox)
@@ -53,7 +53,7 @@ func Execute(bbox string) {
 	//TODO: Deal with the boundingbox parameter
 
 	//Loop each 5 secondes for working
-	d := 5 * time.Second
+	d := time.Duration(refreshTime) * time.Second
 	f, err := os.OpenFile("data.log",
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {

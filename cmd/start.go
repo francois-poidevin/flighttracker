@@ -33,22 +33,18 @@ var startCmd = &cobra.Command{
 		if errBBox != nil {
 			log.Fatal(errBBox.Error())
 		}
-		internal.Execute(bbox)
+		refreshTime, errRefresh := cmd.Flags().GetInt("refresh")
+		if errRefresh != nil {
+			log.Fatal(errRefresh.Error())
+		}
+		internal.Execute(bbox, refreshTime)
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(startCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// startCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// startCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	startCmd.Flags().String("bbox", "",
 		"Searching Bounding Box (SW^NE) 'lat,lon^lat,lon'")
+	startCmd.Flags().Int("refresh", 5, "refresh time for scanning flight")
 }
