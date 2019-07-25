@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -25,7 +27,7 @@ type FlightData struct {
 	Lon              float64 `json:"Lon"`
 	Track            int64   `json:"Track"` //degree to the destination
 	Altitude         int64   `json:"Altitude"`
-	GroundSpeed      int64   `json:"GroundSpeed"` //kts
+	GroundSpeed      int64   `json:"GroundSpeed"` //kts 1kts => 1.852 kmh
 	Unknown1         string  `json:"Unknown1"`    //not describe yet
 	TranspondeurType string  `json:"TranspondeurType"`
 	AircraftType     string  `json:"AircraftType"`
@@ -40,29 +42,46 @@ type FlightData struct {
 	Company          string  `json:"Company"`
 }
 
+// Bbox - a bounding box structure
+type Bbox struct {
+	latSW float64
+	lonSW float64
+	latNE float64
+	lonNE float64
+}
+
 const (
 	feetMeter = 0.3048
+	ktsKmh    = 1.852
 )
 
 //Execute - start the worker
-func Execute(bbox string, refreshTime int) {
-	ctx := context.Background()
-
+func Execute(ctx context.Context, bbox string, refreshTime int) error {
 	log.For(ctx).Info("START with param: " + bbox)
 
-	//TODO: Deal with the boundingbox parameter
+	//interprete bbox parameter
+	bboxStruct, errBbox := getBbox(bbox)
+	if errBbox != nil {
+		log.For(ctx).Error("Unable to interprate parameter bbox", zap.Error(errBbox))
+		return errBbox
+	}
 
-	//Loop each 5 secondes for working
-	d := time.Duration(refreshTime) * time.Second
 	f, err := os.OpenFile("data.log",
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.For(ctx).Error("Unable to Open file", zap.Error(err))
+		return err
 	}
-	for x := range time.Tick(d) {
-		errStore := storeDataOnFile(ctx, x, f)
+
+	//Loop each <bbox parameter> secondes for working
+	d := time.Duration(refreshTime) * time.Second
+	ticker := time.NewTicker(d)
+
+	for x := range ticker.C {
+		errStore := storeDataOnFile(ctx, x, f, bboxStruct)
 		if errStore != nil {
 			log.For(ctx).Error("Unable to store data", zap.Error(errStore))
+			return errStore
 		}
 	}
 
@@ -71,18 +90,55 @@ func Execute(bbox string, refreshTime int) {
 		if errCloseFile != nil {
 			log.For(ctx).Error("unable to close file", zap.Error(errCloseFile))
 		}
+		ticker.Stop()
 
 		log.For(ctx).Info("END")
 	}()
+
+	return nil
 }
 
-func storeDataOnFile(ctx context.Context, t time.Time, f *os.File) error {
+func getBbox(data string) (Bbox, error) {
+	sWnE := strings.Split(data, "^")
+	result := Bbox{}
+	if len(sWnE) != 2 {
+		return result, errors.New("Bounding Box malformed - need ^ for separating SW and NE coordinate")
+	}
+
+	for idx, latlonRec := range sWnE {
+		latlon := strings.Split(latlonRec, ",")
+		if len(latlon) != 2 {
+			return result, errors.New("Bounding Box malformed - need , for separating lat and lon coordinate")
+		}
+		lat, errLat := strconv.ParseFloat(latlon[0], 64)
+		if errLat != nil {
+			return result, errLat
+		}
+		lon, errLon := strconv.ParseFloat(latlon[1], 64)
+		if errLon != nil {
+			return result, errLon
+		}
+		if idx == 0 {
+			result.latSW = lat
+			result.lonSW = lon
+		} else {
+
+			result.latNE = lat
+			result.lonNE = lon
+		}
+	}
+	return result, nil
+}
+
+func storeDataOnFile(ctx context.Context, t time.Time, f *os.File, bbox Bbox) error {
 
 	w := bufio.NewWriter(f)
 
 	// Made the HTTP request - Test area 43.663712,1.570358,43.710510,1.700735
 	// Toulouse and Airport Area - 43.515693,1.318359,43.702630,1.687775
-	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.70,43.51,1.31,1.68&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
+	bounds := fmt.Sprintf("%.2f", bbox.latNE) + "," + fmt.Sprintf("%.2f", bbox.latSW) + "," + fmt.Sprintf("%.2f", bbox.lonSW) + "," + fmt.Sprintf("%.2f", bbox.lonNE)
+	log.For(ctx).Info("bounds", zap.String("value", bounds))
+	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=" + bounds + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
 	if errHTTPGet != nil {
 		return errHTTPGet
 	}
@@ -116,7 +172,7 @@ func storeDataOnFile(ctx context.Context, t time.Time, f *os.File) error {
 		//found flight above 500 meters
 		if (float64(dataObj.Altitude)*feetMeter) < float64(500) &&
 			(float64(dataObj.Altitude)*feetMeter) > float64(0) &&
-			dataObj.GroundSpeed > 0 {
+			float64(dataObj.GroundSpeed)*ktsKmh > 0 {
 			IllegalFlight = append(IllegalFlight, dataObj)
 		}
 	}

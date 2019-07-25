@@ -1,3 +1,5 @@
+package cmd
+
 /*
 Copyright © 2019 NAME HERE <EMAIL ADDRESS>
 
@@ -13,13 +15,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package cmd
 
 import (
-	"log"
+	"context"
+	"os"
 
 	"github.com/francois-poidevin/flighttracker/internal"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+	"go.zenithar.org/pkg/log"
 )
 
 // startCmd represents the start command
@@ -29,15 +33,22 @@ var startCmd = &cobra.Command{
 	Long: `Search in a Bounding Box (parameter) for all flights and check altitude rules.
 	The application generate an output data.log file in the execution folder.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
 		bbox, errBBox := cmd.Flags().GetString("bbox")
 		if errBBox != nil {
-			log.Fatal(errBBox.Error())
+			log.For(ctx).Error("Error in fetching flag bbox", zap.Error(errBBox))
+			os.Exit(1)
 		}
 		refreshTime, errRefresh := cmd.Flags().GetInt("refresh")
 		if errRefresh != nil {
-			log.Fatal(errRefresh.Error())
+			log.For(ctx).Error("Error in fetching flag refresh", zap.Error(errRefresh))
+			os.Exit(1)
 		}
-		internal.Execute(bbox, refreshTime)
+		errExec := internal.Execute(ctx, bbox, refreshTime)
+		if errExec != nil {
+			log.For(ctx).Error("Error in Execute processing", zap.Error(errExec))
+			os.Exit(1)
+		}
 	},
 }
 

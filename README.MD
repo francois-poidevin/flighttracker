@@ -8,11 +8,24 @@ This app (under construction ...) is to track all aircrafts that passing onto a 
 - https://www.adsbexchange.com/data
 - https://opensky-network.org/
 
-## Store data
+## Build
+```
+go build -o bin/flighttracker
+```
+
+## Run
+
+```
+./bin/flighttracker start --bbox 43.52,1.32^43.70,1.69 --refresh 5
+```
+
+Do that trought a docker-compose that launch the mongoDB docker image, then start the prog in distroless image
+
+## Store data - Not yet implemented
 
 This application store data in MongoDB table
 
-## Docker images
+## Docker images - Not yet implemented
 
 - Storing data
   
@@ -124,17 +137,6 @@ CMD ["mongod"]
 FROM gcr.io/distroless/base
 ```
 
-## Build
-```
-go build -o bin/flighttracker
-```
 
-## Run
-
-```
-./bin/flighttracker start --bbox 43.52,1.32^43.70,1.69 --refresh 5
-```
-
-Do that trought a docker-compose that launch the mongoDB docker image, then start the prog in distroless image
 
 
