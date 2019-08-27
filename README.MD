@@ -2,11 +2,15 @@
 
 This app (under construction ...) is to track all aircrafts that passing onto a specified Bouding Box, store it, and alert an user if the flight doesn't respect flight rules
 
-## Feed API
+## Informations
+### API feed
 
-- https://www.flightradar24.com (https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.79,43.53,1.23,2.03&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1)
-- https://www.adsbexchange.com/data
-- https://opensky-network.org/
+- [current use] https://www.flightradar24.com (https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.79,43.53,1.23,2.03&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1)
+- [in study] https://www.adsbexchange.com/data
+- [in study] https://opensky-network.org/
+
+### Bbox construction
+If you need to construct a bbox that fit with FlightTracker requierement, take a look in [bboxfinder.com](http://bboxfinder.com)
 
 ## Build
 ```
@@ -14,16 +18,21 @@ go build -o bin/flighttracker
 ```
 
 ## Run
-
+Running flightTracker on bbox (43.52,1.32;43.70,1.69) each 5 secondes
 ```
 ./bin/flighttracker start --bbox 43.52,1.32^43.70,1.69 --refresh 5
 ```
 
-Do that trought a docker-compose that launch the mongoDB docker image, then start the prog in distroless image
+## Store data in file
+FlightTracker store raw data from the API in *rawData.log* file [default]
 
-## Store data - Not yet implemented
+FlightTracker store Illegal flights from the API in *report.log* file [default]
+
+## Store data in noSQL database - Not yet implemented
 
 This application store data in MongoDB table
+
+Do that trought a docker-compose that launch the mongoDB docker image, then start the prog in distroless image
 
 ## Docker images - Not yet implemented
 

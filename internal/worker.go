@@ -56,17 +56,28 @@ const (
 )
 
 //Execute - start the worker
-func Execute(ctx context.Context, bbox string, refreshTime int) error {
-	log.For(ctx).Info("START with param: " + bbox)
+func Execute(ctx context.Context, bbox string, refreshTime int, outputRawFileName string, outputReportFileName string) error {
+	log.For(ctx).Info("START with param: ",
+		zap.String("bbox", bbox),
+		zap.Int("refreshTime (sec)", refreshTime),
+		zap.String("outputRawFileName", outputRawFileName),
+		zap.String("outputReportFileName", outputReportFileName))
 
 	//interprete bbox parameter
 	bboxStruct, errBbox := getBbox(bbox)
 	if errBbox != nil {
-		log.For(ctx).Error("Unable to interprate parameter bbox", zap.Error(errBbox))
+		log.For(ctx).Error("Unable to interpret parameter bbox", zap.Error(errBbox))
 		return errBbox
 	}
 
-	f, err := os.OpenFile("data.log",
+	fIllegalFlights, err := os.OpenFile("report.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.For(ctx).Error("Unable to Open file", zap.Error(err))
+		return err
+	}
+
+	fAllFlights, err := os.OpenFile("rawData.log",
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.For(ctx).Error("Unable to Open file", zap.Error(err))
@@ -78,17 +89,36 @@ func Execute(ctx context.Context, bbox string, refreshTime int) error {
 	ticker := time.NewTicker(d)
 
 	for x := range ticker.C {
-		errStore := storeDataOnFile(ctx, x, f, bboxStruct)
-		if errStore != nil {
-			log.For(ctx).Error("Unable to store data", zap.Error(errStore))
-			return errStore
+		//get Raw datas
+		rawData, errRaw := getRawData(ctx, bboxStruct)
+		if errRaw != nil {
+			log.For(ctx).Error("Unable to get Raw data", zap.Error(errRaw))
+			return errRaw
+		}
+
+		//store on file all the flights founded, if any
+		errStoreAllFlights := storeAllFlightsOnFile(ctx, x, fAllFlights, rawData)
+		if errStoreAllFlights != nil {
+			log.For(ctx).Error("Unable to store All Flights data", zap.Error(errStoreAllFlights))
+			return errStoreAllFlights
+		}
+
+		//store on file the illegal flights founded, if any
+		errStoreIllegalFlights := storeIllegalFlightOnFile(ctx, x, fIllegalFlights, rawData)
+		if errStoreIllegalFlights != nil {
+			log.For(ctx).Error("Unable to store Illegal Flights data", zap.Error(errStoreIllegalFlights))
+			return errStoreIllegalFlights
 		}
 	}
 
 	defer func() {
-		errCloseFile := f.Close()
-		if errCloseFile != nil {
-			log.For(ctx).Error("unable to close file", zap.Error(errCloseFile))
+		errCloseIllegalFile := fIllegalFlights.Close()
+		if errCloseIllegalFile != nil {
+			log.For(ctx).Error("unable to close Illegal Flights file", zap.Error(errCloseIllegalFile))
+		}
+		errCloseAllFlightsFile := fAllFlights.Close()
+		if errCloseAllFlightsFile != nil {
+			log.For(ctx).Error("unable to close All Flights file", zap.Error(errCloseAllFlightsFile))
 		}
 		ticker.Stop()
 
@@ -130,59 +160,91 @@ func getBbox(data string) (Bbox, error) {
 	return result, nil
 }
 
-func storeDataOnFile(ctx context.Context, t time.Time, f *os.File, bbox Bbox) error {
-
-	w := bufio.NewWriter(f)
-
+func getRawData(ctx context.Context, bbox Bbox) ([]FlightData, error) {
 	// Made the HTTP request - Test area 43.663712,1.570358,43.710510,1.700735
 	// Toulouse and Airport Area - 43.515693,1.318359,43.702630,1.687775
 	bounds := fmt.Sprintf("%.2f", bbox.latNE) + "," + fmt.Sprintf("%.2f", bbox.latSW) + "," + fmt.Sprintf("%.2f", bbox.lonSW) + "," + fmt.Sprintf("%.2f", bbox.lonNE)
-	log.For(ctx).Info("bounds", zap.String("value", bounds))
 	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=" + bounds + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
 	if errHTTPGet != nil {
-		return errHTTPGet
+		return nil, errHTTPGet
 	}
 	defer func() {
 		resp.Body.Close()
-		w.Flush()
 	}()
 
 	body, errRead := ioutil.ReadAll(resp.Body)
 	if errRead != nil {
-		return errRead
+		return nil, errRead
 	}
 
-	data, errUnMarshal := unMarshalByte(ctx, body)
+	return unMarshalByte(ctx, body)
+}
 
-	if errUnMarshal != nil {
-		return errUnMarshal
+func storeAllFlightsOnFile(ctx context.Context, t time.Time, f *os.File, data []FlightData) error {
+	w := bufio.NewWriter(f)
+
+	defer func() {
+		w.Flush()
+	}()
+
+	var buffer bytes.Buffer
+
+	if len(data) > 0 {
+		Marshal, err := json.Marshal(data)
+		if err != nil {
+			return err
+		}
+
+		log.For(ctx).Info("========All Flights seen=============",
+			zap.Int("number of Flights", len(data)))
+
+		buffer.Write(Marshal)
+		n4, errWS := w.WriteString(t.String() + " Raw Datas\n" + buffer.String() + "\n====================================\n")
+		if errWS != nil {
+			return errWS
+		}
+		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
+
+	} else {
+		n4, errWS := w.WriteString(t.String() + "\n" + "No Raw data" + "\n====================================\n")
+		if errWS != nil {
+			return errWS
+		}
+		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
 	}
+
+	return nil
+}
+
+func storeIllegalFlightOnFile(ctx context.Context, t time.Time, f *os.File, data []FlightData) error {
+
+	w := bufio.NewWriter(f)
+
+	defer func() {
+		w.Flush()
+	}()
 
 	var buffer bytes.Buffer
 	var IllegalFlight []FlightData
 	for _, dataObj := range data {
-		log.For(ctx).Info("========All Flights seen=============")
-		log.For(ctx).Info("Aircraft",
-			zap.String("aircraftType", dataObj.AircraftType),
-			zap.String("immatriculation1", dataObj.Immatriculation1),
-			zap.String("origine", dataObj.Origine),
-			zap.String("destination", dataObj.Destination),
-			zap.Int64("Altitude feets", dataObj.Altitude),
-			zap.Float64("Altitude meters", float64(dataObj.Altitude)*feetMeter))
-		//found flight above 500 meters
+		//found flight above 500 meters that moving
 		if (float64(dataObj.Altitude)*feetMeter) < float64(500) &&
 			(float64(dataObj.Altitude)*feetMeter) > float64(0) &&
 			float64(dataObj.GroundSpeed)*ktsKmh > 0 {
 			IllegalFlight = append(IllegalFlight, dataObj)
 		}
 	}
+
+	log.For(ctx).Info("========IllegalFlight Flights seen=============",
+		zap.Int("number of Flights", len(IllegalFlight)))
+
 	if len(IllegalFlight) > 0 {
 		Marshal, err := json.Marshal(IllegalFlight)
 		if err != nil {
 			return err
 		}
 		buffer.Write(Marshal)
-		n4, errWS := w.WriteString(t.String() + "\n" + buffer.String() + "\n====================================\n")
+		n4, errWS := w.WriteString(t.String() + " Illegal Flights\n" + buffer.String() + "\n====================================\n")
 		if errWS != nil {
 			return errWS
 		}
@@ -208,7 +270,6 @@ func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
 
 	for k, v := range data {
 		if k != "full_count" && k != "version" && k != "stats" {
-			log.For(ctx).Info("Data key/value", zap.Any("value", v))
 			if reflect.TypeOf(v).Kind() == reflect.Slice {
 				s := reflect.ValueOf(v)
 				_lat, err := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(1)), 64)

@@ -44,7 +44,17 @@ var startCmd = &cobra.Command{
 			log.For(ctx).Error("Error in fetching flag refresh", zap.Error(errRefresh))
 			os.Exit(1)
 		}
-		errExec := internal.Execute(ctx, bbox, refreshTime)
+		outputRawFileName, errOutputRaw := cmd.Flags().GetString("outputraw")
+		if errOutputRaw != nil {
+			log.For(ctx).Error("Error in fetching flag outputraw", zap.Error(errOutputRaw))
+			os.Exit(1)
+		}
+		outputReportFileName, errOutputReport := cmd.Flags().GetString("outputreport")
+		if errOutputReport != nil {
+			log.For(ctx).Error("Error in fetching flag outputreport", zap.Error(errOutputReport))
+			os.Exit(1)
+		}
+		errExec := internal.Execute(ctx, bbox, refreshTime, outputRawFileName, outputReportFileName)
 		if errExec != nil {
 			log.For(ctx).Error("Error in Execute processing", zap.Error(errExec))
 			os.Exit(1)
@@ -58,4 +68,6 @@ func init() {
 	startCmd.Flags().String("bbox", "",
 		"Searching Bounding Box (SW^NE) 'lat,lon^lat,lon'")
 	startCmd.Flags().Int("refresh", 5, "refresh time for scanning flight")
+	startCmd.Flags().String("outputraw", "data.log", "set the output file name for raw data")
+	startCmd.Flags().String("outputreport", "report.log", "set the output file name for illegal flight report")
 }
