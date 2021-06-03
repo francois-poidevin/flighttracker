@@ -152,9 +152,9 @@ CMD ["mongod"]
 
 - worker
 
-[Distroless dockerHub image](https://hub.docker.com/_/mongo)
+[Golang dockerHub image](https://hub.docker.com/_/golang)
 ```
-FROM gcr.io/distroless/base
+FROM golang:alpine
 ```
 
 
