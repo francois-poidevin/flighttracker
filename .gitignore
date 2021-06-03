@@ -17,3 +17,5 @@
 
 #Compilation artifact
 bin/
+
+log/

@@ -1,46 +1,23 @@
 package internal
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
-	"go.zenithar.org/pkg/log"
+	"github.com/francois-poidevin/flighttracker/internal/app"
+	pgSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/db"
+	fileSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/file"
+	stdoutSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/stdout"
+	"github.com/sirupsen/logrus"
 )
-
-//FlightData - storage structure for flightRadar24 API response
-type FlightData struct {
-	FlightID         string  `json:"flightID"`
-	ICAO24BITADDRESS string  `json:"ICAO24BITADDRESS"`
-	Lat              float64 `json:"Lat"`
-	Lon              float64 `json:"Lon"`
-	Track            int64   `json:"Track"` //degree to the destination
-	Altitude         int64   `json:"Altitude"`
-	GroundSpeed      int64   `json:"GroundSpeed"` //kts 1kts => 1.852 kmh
-	Unknown1         string  `json:"Unknown1"`    //not describe yet
-	TranspondeurType string  `json:"TranspondeurType"`
-	AircraftType     string  `json:"AircraftType"`
-	Immatriculation1 string  `json:"Immatriculation1"`
-	TimeStamp        float64 `json:"TimeStamp"`
-	Origine          string  `json:"Origine"`
-	Destination      string  `json:"Destination"`
-	Unknown2         string  `json:"Unknown2"`
-	VerticalSpeed    int64   `json:"VerticalSpeed"`
-	Immatriculation2 string  `json:"Immatriculation2"`
-	Unknown3         string  `json:"Unknown3"`
-	Company          string  `json:"Company"`
-}
 
 // Bbox - a bounding box structure
 type Bbox struct {
@@ -50,79 +27,83 @@ type Bbox struct {
 	lonNE float64
 }
 
-const (
-	feetMeter = 0.3048
-	ktsKmh    = 1.852
-)
-
 //Execute - start the worker
-func Execute(ctx context.Context, bbox string, refreshTime int, outputRawFileName string, outputReportFileName string) error {
-	log.For(ctx).Info("START with param: ",
-		zap.String("bbox", bbox),
-		zap.Int("refreshTime (sec)", refreshTime),
-		zap.String("outputRawFileName", outputRawFileName),
-		zap.String("outputReportFileName", outputReportFileName))
+func Execute(ctx context.Context, bbox string, refreshTime int, outputRawFileName string, outputReportFileName string, sinkerType string, log *logrus.Logger) error {
+
+	log.WithContext(ctx).WithFields(logrus.Fields{
+		"bbox":                 bbox,
+		"refreshTime (sec)":    refreshTime,
+		"outputRawFileName":    outputRawFileName,
+		"outputReportFileName": outputReportFileName,
+		"sinkerType":           sinkerType,
+	}).Info("START with param: ")
 
 	//interprete bbox parameter
 	bboxStruct, errBbox := getBbox(bbox)
 	if errBbox != nil {
-		log.For(ctx).Error("Unable to interpret parameter bbox", zap.Error(errBbox))
+		log.WithContext(ctx).WithFields(logrus.Fields{
+			"Error": errBbox,
+		}).Error("Unable to interpret parameter bbox")
 		return errBbox
 	}
 
-	fIllegalFlights, err := os.OpenFile("report.log",
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.For(ctx).Error("Unable to Open file", zap.Error(err))
-		return err
+	if sinkerType == "FILE" {
+		log.WithContext(ctx).Info("Initiate File Sinker")
+		sinker := fileSinker.New(log)
+		//init sinker object (files)
+		errInit := sinker.Init(ctx)
+		if errInit != nil {
+			log.WithContext(ctx).Error(errInit)
+		}
+		//launch the ticking
+		errFileSink := ticking(ctx, refreshTime, bboxStruct, sinker, log)
+		if errFileSink != nil {
+			log.WithContext(ctx).Error(errFileSink)
+		}
+	} else if sinkerType == "STDOUT" {
+		log.WithContext(ctx).Info("Initiate stdOut Sinker")
+		sinker := stdoutSinker.New(log)
+		//launch the ticking
+		errStdOutSink := ticking(ctx, refreshTime, bboxStruct, sinker, log)
+		if errStdOutSink != nil {
+			log.WithContext(ctx).Error(errStdOutSink)
+		}
+	} else if sinkerType == "DB" {
+		log.WithContext(ctx).Info("Initiate DB Sinker")
+		sinker := pgSinker.New(log)
+		errDBSink := ticking(ctx, refreshTime, bboxStruct, sinker, log)
+		if errDBSink != nil {
+			log.WithContext(ctx).Error(errDBSink)
+		}
+	} else {
+		return errors.New("Wrong sinker specified")
 	}
 
-	fAllFlights, err := os.OpenFile("rawData.log",
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.For(ctx).Error("Unable to Open file", zap.Error(err))
-		return err
-	}
+	return nil
+}
 
+func ticking(ctx context.Context, refreshTime int, bbox Bbox, sinker app.Sinker, log *logrus.Logger) error {
 	//Loop each <bbox parameter> secondes for working
 	d := time.Duration(refreshTime) * time.Second
 	ticker := time.NewTicker(d)
 
 	for x := range ticker.C {
 		//get Raw datas
-		rawData, errRaw := getRawData(ctx, bboxStruct)
+		rawData, errRaw := getRawData(ctx, bbox, log)
 		if errRaw != nil {
-			log.For(ctx).Error("Unable to get Raw data", zap.Error(errRaw))
+			log.WithContext(ctx).WithFields(logrus.Fields{
+				"Error": errRaw,
+			}).Error("Unable to get Raw data")
 			return errRaw
 		}
-
-		//store on file all the flights founded, if any
-		errStoreAllFlights := storeAllFlightsOnFile(ctx, x, fAllFlights, rawData)
-		if errStoreAllFlights != nil {
-			log.For(ctx).Error("Unable to store All Flights data", zap.Error(errStoreAllFlights))
-			return errStoreAllFlights
-		}
-
-		//store on file the illegal flights founded, if any
-		errStoreIllegalFlights := storeIllegalFlightOnFile(ctx, x, fIllegalFlights, rawData)
-		if errStoreIllegalFlights != nil {
-			log.For(ctx).Error("Unable to store Illegal Flights data", zap.Error(errStoreIllegalFlights))
-			return errStoreIllegalFlights
+		errSink := sinker.Sink(ctx, x, rawData)
+		if errSink != nil {
+			log.WithContext(ctx).Error(errSink)
 		}
 	}
 
 	defer func() {
-		errCloseIllegalFile := fIllegalFlights.Close()
-		if errCloseIllegalFile != nil {
-			log.For(ctx).Error("unable to close Illegal Flights file", zap.Error(errCloseIllegalFile))
-		}
-		errCloseAllFlightsFile := fAllFlights.Close()
-		if errCloseAllFlightsFile != nil {
-			log.For(ctx).Error("unable to close All Flights file", zap.Error(errCloseAllFlightsFile))
-		}
 		ticker.Stop()
-
-		log.For(ctx).Info("END")
 	}()
 
 	return nil
@@ -160,7 +141,7 @@ func getBbox(data string) (Bbox, error) {
 	return result, nil
 }
 
-func getRawData(ctx context.Context, bbox Bbox) ([]FlightData, error) {
+func getRawData(ctx context.Context, bbox Bbox, log *logrus.Logger) ([]app.FlightData, error) {
 	// Made the HTTP request - Test area 43.663712,1.570358,43.710510,1.700735
 	// Toulouse and Airport Area - 43.515693,1.318359,43.702630,1.687775
 	bounds := fmt.Sprintf("%.2f", bbox.latNE) + "," + fmt.Sprintf("%.2f", bbox.latSW) + "," + fmt.Sprintf("%.2f", bbox.lonSW) + "," + fmt.Sprintf("%.2f", bbox.lonNE)
@@ -177,93 +158,13 @@ func getRawData(ctx context.Context, bbox Bbox) ([]FlightData, error) {
 		return nil, errRead
 	}
 
-	return unMarshalByte(ctx, body)
+	return unMarshalByte(ctx, body, log)
 }
 
-func storeAllFlightsOnFile(ctx context.Context, t time.Time, f *os.File, data []FlightData) error {
-	w := bufio.NewWriter(f)
-
-	defer func() {
-		w.Flush()
-	}()
-
-	var buffer bytes.Buffer
-
-	if len(data) > 0 {
-		Marshal, err := json.Marshal(data)
-		if err != nil {
-			return err
-		}
-
-		log.For(ctx).Info("========All Flights seen=============",
-			zap.Int("number of Flights", len(data)))
-
-		buffer.Write(Marshal)
-		n4, errWS := w.WriteString(t.String() + " Raw Datas\n" + buffer.String() + "\n====================================\n")
-		if errWS != nil {
-			return errWS
-		}
-		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
-
-	} else {
-		n4, errWS := w.WriteString(t.String() + "\n" + "No Raw data" + "\n====================================\n")
-		if errWS != nil {
-			return errWS
-		}
-		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
-	}
-
-	return nil
-}
-
-func storeIllegalFlightOnFile(ctx context.Context, t time.Time, f *os.File, data []FlightData) error {
-
-	w := bufio.NewWriter(f)
-
-	defer func() {
-		w.Flush()
-	}()
-
-	var buffer bytes.Buffer
-	var IllegalFlight []FlightData
-	for _, dataObj := range data {
-		//found flight above 500 meters that moving
-		if (float64(dataObj.Altitude)*feetMeter) < float64(500) &&
-			(float64(dataObj.Altitude)*feetMeter) > float64(0) &&
-			float64(dataObj.GroundSpeed)*ktsKmh > 0 {
-			IllegalFlight = append(IllegalFlight, dataObj)
-		}
-	}
-
-	log.For(ctx).Info("========IllegalFlight Flights seen=============",
-		zap.Int("number of Flights", len(IllegalFlight)))
-
-	if len(IllegalFlight) > 0 {
-		Marshal, err := json.Marshal(IllegalFlight)
-		if err != nil {
-			return err
-		}
-		buffer.Write(Marshal)
-		n4, errWS := w.WriteString(t.String() + " Illegal Flights\n" + buffer.String() + "\n====================================\n")
-		if errWS != nil {
-			return errWS
-		}
-		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
-	} else {
-		n4, errWS := w.WriteString(t.String() + "\n" + "No Illegal Flight" + "\n====================================\n")
-		if errWS != nil {
-			return errWS
-		}
-		log.For(ctx).Info("Wrote", zap.String("length", fmt.Sprintf("wrote %d bytes", n4)))
-	}
-
-	return nil
-}
-
-func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
+func unMarshalByte(ctx context.Context, byt []byte, log *logrus.Logger) ([]app.FlightData, error) {
 
 	var data map[string]interface{}
-	var result []FlightData
+	var result []app.FlightData
 	if err := json.Unmarshal(byt, &data); err != nil {
 		return nil, err
 	}
@@ -274,34 +175,48 @@ func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
 				s := reflect.ValueOf(v)
 				_lat, err := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(1)), 64)
 				if err != nil {
-					log.For(ctx).Error("Error in parsing _lat :", zap.Error(err))
+					log.WithContext(ctx).WithFields(logrus.Fields{
+						"Error in parsing _lat :": err,
+					}).Error()
 				}
 				_lon, err := strconv.ParseFloat(fmt.Sprintf("%v", s.Index(2)), 64)
 				if err != nil {
-					log.For(ctx).Error("Error in parsing _lon :", zap.Error(err))
+					log.WithContext(ctx).WithFields(logrus.Fields{
+						"Error in parsing _lon :": err,
+					}).Error()
 				}
 				_track, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(3)), 10, 64)
 				if err != nil {
-					log.For(ctx).Error("Error in parsing _track :", zap.Error(err))
+					log.WithContext(ctx).WithFields(logrus.Fields{
+						"Error in parsing _track :": err,
+					}).Error()
 				}
 				_altitude, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(4)), 10, 64)
 				if err != nil {
-					log.For(ctx).Error("Error in parsing _altitude :", zap.Error(err))
+					log.WithContext(ctx).WithFields(logrus.Fields{
+						"Error in parsing _altitude :": err,
+					}).Error()
 				}
 				_groundSpeed, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(5)), 10, 64)
 				if err != nil {
-					log.For(ctx).Error("Error in parsing _groundSpeed :", zap.Error(err))
+					log.WithContext(ctx).WithFields(logrus.Fields{
+						"Error in parsing _groundSpeed :": err,
+					}).Error()
 				}
 				_timeStamp, err := strconv.ParseFloat(fmt.Sprintf("%f", s.Index(10)), 64)
 				if err != nil {
-					log.For(ctx).Error("Error in parsing _timeStamp :", zap.Error(err))
+					log.WithContext(ctx).WithFields(logrus.Fields{
+						"Error in parsing _timeStamp :": err,
+					}).Error()
 				}
 				_verticalSpeed, err := strconv.ParseInt(fmt.Sprintf("%v", s.Index(14)), 10, 64)
 				if err != nil {
-					log.For(ctx).Error("Error in parsing _verticalSpeed :", zap.Error(err))
+					log.WithContext(ctx).WithFields(logrus.Fields{
+						"Error in parsing _verticalSpeed :": err,
+					}).Error()
 				}
 
-				flightData := FlightData{
+				flightData := app.FlightData{
 					FlightID:         k,
 					ICAO24BITADDRESS: fmt.Sprintf("%v", s.Index(0)),
 					Lat:              _lat,
@@ -319,7 +234,7 @@ func unMarshalByte(ctx context.Context, byt []byte) ([]FlightData, error) {
 					Unknown2:         fmt.Sprintf("%v", s.Index(13)),
 					VerticalSpeed:    _verticalSpeed,
 					Immatriculation2: fmt.Sprintf("%v", s.Index(15)),
-					Unknown3:         fmt.Sprintf("%v", s.Index(16)),
+					Hint:             fmt.Sprintf("%v", s.Index(16)),
 					Company:          fmt.Sprintf("%v", s.Index(17)),
 				}
 				result = append(result, flightData)

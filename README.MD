@@ -17,10 +17,21 @@ If you need to construct a bbox that fit with FlightTracker requierement, take a
 go build -o bin/flighttracker
 ```
 
+or
+
+```
+docker build -t flighttracker:latest .
+```
+
 ## Run
 Running flightTracker on bbox (43.52,1.32;43.70,1.69) each 5 secondes
 ```
 ./bin/flighttracker start --bbox 43.52,1.32^43.70,1.69 --refresh 5
+```
+or
+
+```
+docker run flighttracker start --bbox 43.52,1.32^43.70,1.69 --refresh 5
 ```
 
 ## Store data in file

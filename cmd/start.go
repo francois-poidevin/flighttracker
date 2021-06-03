@@ -21,9 +21,8 @@ import (
 	"os"
 
 	"github.com/francois-poidevin/flighttracker/internal"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"go.uber.org/zap"
-	"go.zenithar.org/pkg/log"
 )
 
 // startCmd represents the start command
@@ -34,29 +33,60 @@ var startCmd = &cobra.Command{
 	The application generate an output data.log file in the execution folder.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
+
+		//log handling
+		var log = logrus.New()
+		// log.Formatter = new(logrus.JSONFormatter)
+		log.Formatter = new(logrus.TextFormatter)                     //default
+		log.Formatter.(*logrus.TextFormatter).DisableColors = true    // remove colors
+		log.Formatter.(*logrus.TextFormatter).DisableTimestamp = true // remove timestamp from test output
+		log.Level = logrus.TraceLevel
+		log.Out = os.Stdout
+
+		// Initialize config
+		// initConfig()
+
+		//handle parameters
 		bbox, errBBox := cmd.Flags().GetString("bbox")
 		if errBBox != nil {
-			log.For(ctx).Error("Error in fetching flag bbox", zap.Error(errBBox))
+			log.WithContext(ctx).WithFields(logrus.Fields{
+				"Error": errBBox,
+			}).Error("Error in fetching flag 'bbox'")
 			os.Exit(1)
 		}
 		refreshTime, errRefresh := cmd.Flags().GetInt("refresh")
 		if errRefresh != nil {
-			log.For(ctx).Error("Error in fetching flag refresh", zap.Error(errRefresh))
+			log.WithContext(ctx).WithFields(logrus.Fields{
+				"Error": errRefresh,
+			}).Error("Error in fetching flag 'refresh'")
 			os.Exit(1)
 		}
 		outputRawFileName, errOutputRaw := cmd.Flags().GetString("outputraw")
 		if errOutputRaw != nil {
-			log.For(ctx).Error("Error in fetching flag outputraw", zap.Error(errOutputRaw))
+			log.WithContext(ctx).WithFields(logrus.Fields{
+				"Error": errOutputRaw,
+			}).Error("Error in fetching flag 'outputraw'")
 			os.Exit(1)
 		}
 		outputReportFileName, errOutputReport := cmd.Flags().GetString("outputreport")
 		if errOutputReport != nil {
-			log.For(ctx).Error("Error in fetching flag outputreport", zap.Error(errOutputReport))
+			log.WithContext(ctx).WithFields(logrus.Fields{
+				"Error": errOutputReport,
+			}).Error("Error in fetching flag 'outputreport'")
 			os.Exit(1)
 		}
-		errExec := internal.Execute(ctx, bbox, refreshTime, outputRawFileName, outputReportFileName)
+		sinkerType, errSinkerType := cmd.Flags().GetString("sinkerType")
+		if errSinkerType != nil {
+			log.WithContext(ctx).WithFields(logrus.Fields{
+				"Error": errSinkerType,
+			}).Error("Error in fetching flag 'sinkerType'")
+			os.Exit(1)
+		}
+		errExec := internal.Execute(ctx, bbox, refreshTime, outputRawFileName, outputReportFileName, sinkerType, log)
 		if errExec != nil {
-			log.For(ctx).Error("Error in Execute processing", zap.Error(errExec))
+			log.WithContext(ctx).WithFields(logrus.Fields{
+				"Error": errExec,
+			}).Error("Error in Execute processing")
 			os.Exit(1)
 		}
 	},
@@ -68,6 +98,7 @@ func init() {
 	startCmd.Flags().String("bbox", "",
 		"Searching Bounding Box (SW^NE) 'lat,lon^lat,lon'")
 	startCmd.Flags().Int("refresh", 5, "refresh time for scanning flight")
-	startCmd.Flags().String("outputraw", "data.log", "set the output file name for raw data")
+	startCmd.Flags().String("outputraw", "rawData.log", "set the output file name for raw data")
 	startCmd.Flags().String("outputreport", "report.log", "set the output file name for illegal flight report")
+	startCmd.Flags().String("sinkerType", "FILE", "set the sinker type (STDOUT|FILE|DB)")
 }
