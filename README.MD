@@ -34,6 +34,24 @@ or
 docker run flighttracker start --bbox 43.52,1.32^43.70,1.69 --refresh 5
 ```
 
+### Parameters
+
+| Parameter        	| Signification           			| Examples  	|
+| ------------- 	|---------------| ------|
+| refresh			| Refresh timer (every n seconds)	| --refresh 5	|
+| bbox				| BoundingBox where analyse is done (Bottom Left-Top Right)	| --bbox 43.52,1.32^43.70,1.69	|
+| sinkerType				| Sinker type (STDOUT or FILE or DB)	| --sinkerType FILE	|
+
+### sinkerType
+#### STDOUT
+The sinker will display on Standard Output the raw data unmarshalled and unmarshalled data with criteria (flight under ...) 
+#### FILE
+This sinker will create files on local folder where the application is running under 'log' folder. The _rawData.log_ file store all unmarshalled data from raw json. The _report.log_ file store only unmarshalled data with criteria (flight under ...)
+#### DB
+In progress
+
+
+
 ## Store data in file
 FlightTracker store raw data from the API in *rawData.log* file [default]
 
