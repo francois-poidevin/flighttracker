@@ -1,4 +1,4 @@
-package sinkers
+package stdout
 
 import (
 	"bytes"

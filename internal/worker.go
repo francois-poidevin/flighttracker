@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"os/signal"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/francois-poidevin/flighttracker/config"
 	"github.com/francois-poidevin/flighttracker/internal/app"
 	pgSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/db"
 	fileSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/file"
@@ -28,18 +32,25 @@ type Bbox struct {
 }
 
 //Execute - start the worker
-func Execute(ctx context.Context, bbox string, refreshTime int, outputRawFileName string, outputReportFileName string, sinkerType string, log *logrus.Logger) error {
+func Execute(ctx context.Context,
+	log *logrus.Logger,
+	conf config.Configuration) error {
 
 	log.WithContext(ctx).WithFields(logrus.Fields{
-		"bbox":                 bbox,
-		"refreshTime (sec)":    refreshTime,
-		"outputRawFileName":    outputRawFileName,
-		"outputReportFileName": outputReportFileName,
-		"sinkerType":           sinkerType,
-	}).Info("START with param: ")
+		"bbox":                 conf.Flighttracker.Bbox,
+		"refreshTime (sec)":    conf.Flighttracker.Refresh,
+		"outputRawFileName":    conf.Flighttracker.File.Outputraw,    //TODO: use it in file sinker
+		"outputReportFileName": conf.Flighttracker.File.Outputreport, //TODO: use it in file sinker
+		"sinkerType":           conf.Flighttracker.Sinkertype,
+		"dbHost":               conf.Flighttracker.Postgres.Host,
+		"dbPort":               conf.Flighttracker.Postgres.Port,
+		"dbPassword":           conf.Flighttracker.Postgres.Password,
+		"dbUser":               conf.Flighttracker.Postgres.User,
+		"dbName":               conf.Flighttracker.Postgres.Dbname,
+	}).Info("START with Configuration params: ")
 
 	//interprete bbox parameter
-	bboxStruct, errBbox := getBbox(bbox)
+	bboxStruct, errBbox := getBbox(conf.Flighttracker.Bbox)
 	if errBbox != nil {
 		log.WithContext(ctx).WithFields(logrus.Fields{
 			"Error": errBbox,
@@ -47,39 +58,68 @@ func Execute(ctx context.Context, bbox string, refreshTime int, outputRawFileNam
 		return errBbox
 	}
 
-	if sinkerType == "FILE" {
+	if conf.Flighttracker.Sinkertype == "FILE" {
 		log.WithContext(ctx).Info("Initiate File Sinker")
 		sinker := fileSinker.New(log)
 		//init sinker object (files)
 		errInit := sinker.Init(ctx)
 		if errInit != nil {
 			log.WithContext(ctx).Error(errInit)
+			return errInit
 		}
 		//launch the ticking
-		errFileSink := ticking(ctx, refreshTime, bboxStruct, sinker, log)
+		errFileSink := ticking(ctx, conf.Flighttracker.Refresh, bboxStruct, sinker, log)
 		if errFileSink != nil {
 			log.WithContext(ctx).Error(errFileSink)
+			return errFileSink
 		}
-	} else if sinkerType == "STDOUT" {
+	} else if conf.Flighttracker.Sinkertype == "STDOUT" {
 		log.WithContext(ctx).Info("Initiate stdOut Sinker")
 		sinker := stdoutSinker.New(log)
 		//launch the ticking
-		errStdOutSink := ticking(ctx, refreshTime, bboxStruct, sinker, log)
+		errStdOutSink := ticking(ctx, conf.Flighttracker.Refresh, bboxStruct, sinker, log)
 		if errStdOutSink != nil {
 			log.WithContext(ctx).Error(errStdOutSink)
+			return errStdOutSink
 		}
-	} else if sinkerType == "DB" {
+	} else if conf.Flighttracker.Sinkertype == "DB" {
 		log.WithContext(ctx).Info("Initiate DB Sinker")
 		sinker := pgSinker.New(log)
-		errDBSink := ticking(ctx, refreshTime, bboxStruct, sinker, log)
+		//init sinker object (files)
+		errInit := sinker.Init(ctx)
+		if errInit != nil {
+			log.WithContext(ctx).Error(errInit)
+			return errInit
+		}
+		errDBSink := ticking(ctx, conf.Flighttracker.Refresh, bboxStruct, sinker, log)
 		if errDBSink != nil {
 			log.WithContext(ctx).Error(errDBSink)
+			return errDBSink
 		}
 	} else {
 		return errors.New("Wrong sinker specified")
 	}
 
 	return nil
+}
+
+//TODO: handle how to handle signals
+func sigCatch(ctx context.Context, sinker app.Sinker, log *logrus.Logger) {
+
+	sigc := make(chan os.Signal, 1)
+	done := make(chan bool, 1)
+	signal.Notify(sigc,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
+	go func() {
+		s := <-sigc
+		log.WithContext(ctx).Info("Signal: " + s.String())
+		done <- true
+	}()
+
+	<-done
 }
 
 func ticking(ctx context.Context, refreshTime int, bbox Bbox, sinker app.Sinker, log *logrus.Logger) error {

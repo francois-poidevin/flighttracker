@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "github.com/francois-poidevin/flighttracker/cmd"
+import "github.com/francois-poidevin/flighttracker/cli/cmd"
 
 func main() {
 	cmd.Execute()

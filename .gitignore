@@ -19,3 +19,6 @@
 bin/
 
 log/
+
+#Local Configuration file
+config_flighttracker.toml

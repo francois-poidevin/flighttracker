@@ -1,4 +1,4 @@
-package sinkers
+package file
 
 import (
 	"bufio"
@@ -37,7 +37,9 @@ func (s *FileSinker) Init(ctx context.Context) error {
 			return err
 		}
 	}
+	//TODO: store file in subfolder named with timestamp
 
+	//TODO: use configuration file for file naming
 	fIllegalFlights, err := os.OpenFile(filepath.Join("log", "report.log"),
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
