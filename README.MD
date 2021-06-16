@@ -92,7 +92,7 @@ You can change the configuration file for specifying configuration
 ### Explaination
 
 | Parameter        	| Signification           			|
-| ------------- 	|---------------| ------|
+| ------------- 	|---------------|
 | Flighttracker.refresh			| Refresh timer (every n seconds)	|
 | Flighttracker.bbox				| BoundingBox where analyse is done (Bottom Left-Top Right)	|
 | Flighttracker.sinkerType				| Sinker type (STDOUT or FILE or DB)	|
