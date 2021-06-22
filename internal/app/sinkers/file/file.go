@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/francois-poidevin/flighttracker/internal/app"
@@ -34,18 +35,28 @@ func (s *FileSinker) Init(ctx context.Context, params interface{}) error {
 		"Outputreport": parameters.Outputreport,
 	}).Info("Initialisation File sinker Parameters")
 
-	if _, err := os.Stat("log"); os.IsNotExist(err) {
-		err := os.Mkdir("log", os.ModePerm)
-		if err != nil {
-			s.Log.WithContext(ctx).WithFields(logrus.Fields{
-				"Error": err,
-			}).Error("Unable to create folder 'log'")
-			return err
-		}
+	logFolder := "log"
+	errCreateFolder := makeDirectoryIfNotExists(logFolder)
+	if errCreateFolder != nil {
+		s.Log.WithContext(ctx).WithFields(logrus.Fields{
+			"Error":  errCreateFolder,
+			"folder": logFolder,
+		}).Error("Unable to create folder path")
+		return errCreateFolder
 	}
-	//TODO: store file in subfolder named with timestamp
 
-	fIllegalFlights, err := os.OpenFile(filepath.Join("log", parameters.Outputreport),
+	//create folder for files
+	timestampFolderName := time.Now().Unix()
+	errCreateFolder = makeDirectoryIfNotExists(filepath.Join(logFolder, strconv.FormatInt(timestampFolderName, 10)))
+	if errCreateFolder != nil {
+		s.Log.WithContext(ctx).WithFields(logrus.Fields{
+			"Error":  errCreateFolder,
+			"folder": timestampFolderName,
+		}).Error("Unable to create folder path")
+		return errCreateFolder
+	}
+
+	fIllegalFlights, err := os.OpenFile(filepath.Join(logFolder, strconv.FormatInt(timestampFolderName, 10), parameters.Outputreport),
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		s.Log.WithContext(ctx).WithFields(logrus.Fields{
@@ -54,8 +65,11 @@ func (s *FileSinker) Init(ctx context.Context, params interface{}) error {
 		return err
 	}
 	s.fIllegalFlights = fIllegalFlights
+	s.Log.WithContext(ctx).WithFields(logrus.Fields{
+		"Illegal Flights file": s.fIllegalFlights.Name(),
+	}).Info("File successfully created")
 
-	fAllFlights, err := os.OpenFile(filepath.Join("log", parameters.Outputraw),
+	fAllFlights, err := os.OpenFile(filepath.Join("log", strconv.FormatInt(timestampFolderName, 10), parameters.Outputraw),
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		s.Log.WithContext(ctx).WithFields(logrus.Fields{
@@ -64,6 +78,9 @@ func (s *FileSinker) Init(ctx context.Context, params interface{}) error {
 		return err
 	}
 	s.fAllFlights = fAllFlights
+	s.Log.WithContext(ctx).WithFields(logrus.Fields{
+		"All Flights file": s.fAllFlights.Name(),
+	}).Info("File successfully created")
 
 	return nil
 }
@@ -177,5 +194,12 @@ func (s *FileSinker) storeIllegalFlightOnFile(ctx context.Context, t time.Time, 
 		return errors.New("No IllegalFlight file for storing data")
 	}
 
+	return nil
+}
+
+func makeDirectoryIfNotExists(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return os.Mkdir(path, os.ModeDir|0755)
+	}
 	return nil
 }
