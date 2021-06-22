@@ -27,7 +27,13 @@ func New(log *logrus.Logger) app.Sinker {
 	return &FileSinker{Log: log}
 }
 
-func (s *FileSinker) Init(ctx context.Context) error {
+func (s *FileSinker) Init(ctx context.Context, params interface{}) error {
+	parameters := params.(Configuration)
+	s.Log.WithContext(ctx).WithFields(logrus.Fields{
+		"Outputraw":    parameters.Outputraw,
+		"Outputreport": parameters.Outputreport,
+	}).Info("Initialisation File sinker Parameters")
+
 	if _, err := os.Stat("log"); os.IsNotExist(err) {
 		err := os.Mkdir("log", os.ModePerm)
 		if err != nil {
@@ -39,8 +45,7 @@ func (s *FileSinker) Init(ctx context.Context) error {
 	}
 	//TODO: store file in subfolder named with timestamp
 
-	//TODO: use configuration file for file naming
-	fIllegalFlights, err := os.OpenFile(filepath.Join("log", "report.log"),
+	fIllegalFlights, err := os.OpenFile(filepath.Join("log", parameters.Outputreport),
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		s.Log.WithContext(ctx).WithFields(logrus.Fields{
@@ -50,7 +55,7 @@ func (s *FileSinker) Init(ctx context.Context) error {
 	}
 	s.fIllegalFlights = fIllegalFlights
 
-	fAllFlights, err := os.OpenFile(filepath.Join("log", "rawData.log"),
+	fAllFlights, err := os.OpenFile(filepath.Join("log", parameters.Outputraw),
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		s.Log.WithContext(ctx).WithFields(logrus.Fields{

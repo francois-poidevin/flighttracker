@@ -39,8 +39,8 @@ func Execute(ctx context.Context,
 	log.WithContext(ctx).WithFields(logrus.Fields{
 		"bbox":                 conf.Flighttracker.Bbox,
 		"refreshTime (sec)":    conf.Flighttracker.Refresh,
-		"outputRawFileName":    conf.Flighttracker.File.Outputraw,    //TODO: use it in file sinker
-		"outputReportFileName": conf.Flighttracker.File.Outputreport, //TODO: use it in file sinker
+		"outputRawFileName":    conf.Flighttracker.File.Outputraw,
+		"outputReportFileName": conf.Flighttracker.File.Outputreport,
 		"sinkerType":           conf.Flighttracker.Sinkertype,
 		"dbHost":               conf.Flighttracker.Postgres.Host,
 		"dbPort":               conf.Flighttracker.Postgres.Port,
@@ -62,7 +62,7 @@ func Execute(ctx context.Context,
 		log.WithContext(ctx).Info("Initiate File Sinker")
 		sinker := fileSinker.New(log)
 		//init sinker object (files)
-		errInit := sinker.Init(ctx)
+		errInit := sinker.Init(ctx, conf.Flighttracker.File)
 		if errInit != nil {
 			log.WithContext(ctx).Error(errInit)
 			return errInit
@@ -86,7 +86,7 @@ func Execute(ctx context.Context,
 		log.WithContext(ctx).Info("Initiate DB Sinker")
 		sinker := pgSinker.New(log)
 		//init sinker object (files)
-		errInit := sinker.Init(ctx)
+		errInit := sinker.Init(ctx, conf.Flighttracker.Postgres)
 		if errInit != nil {
 			log.WithContext(ctx).Error(errInit)
 			return errInit

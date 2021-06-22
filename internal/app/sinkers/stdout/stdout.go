@@ -19,7 +19,7 @@ func New(log *logrus.Logger) app.Sinker {
 	return &StdOutSinker{Log: log}
 }
 
-func (s *StdOutSinker) Init(ctx context.Context) error {
+func (s *StdOutSinker) Init(ctx context.Context, params interface{}) error {
 	//Nothing to do here
 	return nil
 }

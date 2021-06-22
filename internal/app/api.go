@@ -34,6 +34,6 @@ const (
 )
 
 type Sinker interface {
-	Init(ctx context.Context) error
+	Init(ctx context.Context, params interface{}) error
 	Sink(ctx context.Context, t time.Time, data []FlightData) error
 }

@@ -149,5 +149,29 @@ FROM golang:alpine
 
 ## Docker compose - not yet implemented
 
+## Airport area
+For excluding illegal flights onto airport area, we will use overpass QL to request OSM API to generate polygon of each airport in France
+### Overpass
+Play the overpass QL script on [Overpass-turbo](https://overpass-turbo.eu/)
+### Overpass QL
+```json
+[out:json][timeout:600];
+// gather results
+(
+  // query part for: “aeroway=aerodrome”
+  node["aeroway"="aerodrome"]({{bbox}});
+  way["aeroway"="aerodrome"]({{bbox}});
+  relation["aeroway"="aerodrome"]({{bbox}});
+);
+// print results
+out body;
+>;
+out skel qt;
+```
+
+### osmtogeojson
+To generate OSM data to geojson
+[osmtogeojson](https://tyrasd.github.io/osmtogeojson/)
+
 
 

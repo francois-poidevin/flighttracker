@@ -13,16 +13,10 @@ import (
 )
 
 const (
-	host       = "172.17.0.2"
-	port       = 5432
-	user       = "postgres"
-	password   = "mysecretpassword"
-	dbname     = "postgres"
 	schemaname = "flighttracker"
 	tablename  = "flight"
 )
 
-//TODO add database connection
 type PostGreSinker struct {
 	Log *logrus.Logger
 	db  *sql.DB
@@ -33,11 +27,13 @@ func New(log *logrus.Logger) app.Sinker {
 	return &PostGreSinker{Log: log}
 }
 
-func (s *PostGreSinker) Init(ctx context.Context) error {
+func (s *PostGreSinker) Init(ctx context.Context, params interface{}) error {
+	parameters := params.(Configuration)
+
 	// Init the connection to the database
 	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
 		"password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
+		parameters.Host, parameters.Port, parameters.User, parameters.Password, parameters.Dbname)
 	s.Log.WithContext(ctx).Info("Init DB ... : " + psqlInfo)
 
 	db, err := sql.Open("postgres", psqlInfo)
@@ -50,7 +46,7 @@ func (s *PostGreSinker) Init(ctx context.Context) error {
 		return err
 	}
 
-	s.Log.WithContext(ctx).Info("Successfully connected : " + host)
+	s.Log.WithContext(ctx).Info("Successfully connected : " + parameters.Host)
 
 	s.db = db
 
@@ -68,7 +64,6 @@ func (s *PostGreSinker) Init(ctx context.Context) error {
 
 	// create database :
 	// table
-	//TODO: change timestamp field to real timestamp
 	createTableSQL := "CREATE TABLE IF NOT EXISTS " + schemaname + "." + tablename + " (FlightID varchar(40) NOT NULL, ICAO24BITADDRESS varchar(40), Lat decimal, Lon decimal, Track integer, Altitude integer, GroundSpeed integer, Unknown1 varchar(40), TranspondeurType varchar(40), AircraftType varchar(40), Immatriculation1 varchar(40), TimeStamp timestamp, Origine varchar(40), Destination varchar(40), Unknown2 varchar(40), VerticalSpeed integer, Immatriculation2 varchar(40), Hint varchar(40), Company varchar(40), geom geometry(Geometry,4326))"
 	s.Log.WithContext(ctx).WithFields(logrus.Fields{
 		"SQL": createTableSQL,
