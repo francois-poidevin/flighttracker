@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"time"
+
+	"github.com/francois-poidevin/flighttracker/internal/app/tools"
 )
 
 //FlightData - storage structure for flightRadar24 API response
@@ -36,4 +38,8 @@ const (
 type Sinker interface {
 	Init(ctx context.Context, params interface{}) error
 	Sink(ctx context.Context, t time.Time, data []FlightData) error
+}
+
+type Service interface {
+	Search(ctx context.Context, params interface{}, bbox tools.Bbox, altThreshold int, fromTimeStamp, toTimeStamp time.Time) ([]FlightData, error)
 }

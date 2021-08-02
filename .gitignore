@@ -17,6 +17,8 @@
 
 #Compilation artifact
 bin/
+configlocal/
+data/
 
 log/
 

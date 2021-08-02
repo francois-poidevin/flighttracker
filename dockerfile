@@ -26,5 +26,7 @@ WORKDIR /dist
 # Copy binary from build to main folder
 RUN cp /build/flighttracker .
 
+EXPOSE 8080
+
 # Command to run when starting the container
 ENTRYPOINT ["/dist/flighttracker"]

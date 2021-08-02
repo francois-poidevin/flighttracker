@@ -31,7 +31,7 @@ docker build -t flighttracker:latest .
 ### Generate
 Generate a configuration file on local folder with default values
 ```bash
-./bin/flighttracker config new > config_flighttracker.toml
+./bin/flighttracker config new > /configlocal/config_flighttracker.toml
 ```
 You can change the configuration file for specifying configuration
 
@@ -51,9 +51,9 @@ You can change the configuration file for specifying configuration
   sinkertype = "DB"
 
   ###############################
-  # db sinker configuration 
+  # postgres sinker configuration 
   ###############################
-  [Flighttracker.db]
+  [Flighttracker.postgres]
 
     # Postgres dbName
     dbName = "postgres"
@@ -96,20 +96,23 @@ You can change the configuration file for specifying configuration
 | Flighttracker.refresh			| Refresh timer (every n seconds)	|
 | Flighttracker.bbox				| BoundingBox where analyse is done (Bottom Left-Top Right)	|
 | Flighttracker.sinkerType				| Sinker type (STDOUT or FILE or DB)	|
-| Flighttracker.db.dbName				| Postgres Database Name	|
-| Flighttracker.db.host			        | Postgres Database host	|
-| Flighttracker.db.password				| Postgres Database password	|
-| Flighttracker.db.port				    | Postgres Database port	|
-| Flighttracker.db.user				    | Postgres Database user	|
+| Flighttracker.postgres.dbName				| Postgres Database Name	|
+| Flighttracker.postgres.host			        | Postgres Database host	|
+| Flighttracker.postgres.password				| Postgres Database password	|
+| Flighttracker.postgres.port				    | Postgres Database port	|
+| Flighttracker.postgres.user				    | Postgres Database user	|
 | Flighttracker.file.outputraw			| File name for output raw for sinker type 'FILE' 	|
 | Flighttracker.file.outputreport		| File name for output report for sinker type 'FILE'	|
 | Log		| Log level used	|
 
 ### sinkerType
+
 #### STDOUT
 The sinker will display on Standard Output the raw data unmarshalled and unmarshalled data with criteria (flight under ...) 
+
 #### FILE
 This sinker will create files on local folder where the application is running under 'log' folder. The _rawData.log_ file store all unmarshalled data from raw json. The _report.log_ file store only unmarshalled data with criteria (flight under ...)
+
 #### DB
 ##### Pre-requisite
 
@@ -121,15 +124,54 @@ This sinker will create a database structure in postgres database (schema and ta
 This sinker will store inbound data to postgres database
 
 ## Run
+### start service
+
+The _start_ CLI service allow to sink data in differents sinkers has: STDOUT, FILE, DB (POSTGRES)
+
 Running flightTracker with default information of configuration file
 ```bash
-./bin/flighttracker start --config config_flighttracker.toml
+./bin/flighttracker start --config /configlocal/config_flighttracker.toml
 ```
 or
 
 ```bash
-docker run flighttracker start --config config_flighttracker.toml
+docker run -v /home/poidevin/Projects/flighttracker/configlocal:/tmp flighttracker:latest start --config /tmp/config_flighttracker.toml
 ```
+
+### startHttp service
+The _startHttp_ CLI service allow start a REST server on 8080 port to sink data in database (POSTGRES) and allow to request to the database
+
+Running flightTracker with default information of configuration file
+```bash
+./bin/flighttracker startHttp --config /configlocal/config_flighttracker.toml
+```
+or
+
+```bash
+docker run -v /home/poidevin/Projects/flighttracker/configlocal:/tmp -p 8080:8080 flighttracker:latest startHttp --config /tmp/config_flighttracker.toml
+```
+then call the endpoint on docker container IP (i.e. 172.17.0.1:8080)
+
+#### endpoints
+
+| enpoint        	| HTTP Methods           			| example           			|signification           			|
+| ------------- 	|---------------   |---------------   |   ---------------|
+| /start | GET | localhost:8080/api/v1/start | to start the sinking service on database |
+| /stop | GET | localhost:8080/api/v1/stop | to stop the sinking service on database |
+| /search | GET | localhost:8080/api/v1/search?bbox=43.52,1.32^43.70,1.69&altThreshold=500&fromTimeStamp=2021-07-22T09:00:00&toTimeStamp=2021-07-24T12:00:00 | to search data from database on several criteria as path parameters |
+
+##### start
+To start the sinking service on database
+
+##### stop
+To stop the sinking service on database
+##### search
+| path parameters        	| signification           			|
+|-----------------------  |------------------------------|
+|         bbox                |  BoundingBox where analyse is done (Bottom Left-Top Right)                             |
+|       altThreshold          |   floor threshold for research. Only above and equals data will be returned                         |
+|     fromTimeStamp           |  from time windows for search                             |
+|     toTimeStamp             |  to time windows for search                             |
 
 ## Docker images
 

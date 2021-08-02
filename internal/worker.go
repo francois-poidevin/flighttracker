@@ -7,12 +7,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
-	"os/signal"
 	"reflect"
 	"strconv"
-	"strings"
-	"syscall"
 	"time"
 
 	"github.com/francois-poidevin/flighttracker/config"
@@ -20,16 +16,9 @@ import (
 	pgSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/db"
 	fileSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/file"
 	stdoutSinker "github.com/francois-poidevin/flighttracker/internal/app/sinkers/stdout"
+	"github.com/francois-poidevin/flighttracker/internal/app/tools"
 	"github.com/sirupsen/logrus"
 )
-
-// Bbox - a bounding box structure
-type Bbox struct {
-	latSW float64
-	lonSW float64
-	latNE float64
-	lonNE float64
-}
 
 //Execute - start the worker
 func Execute(ctx context.Context,
@@ -50,7 +39,7 @@ func Execute(ctx context.Context,
 	}).Info("START with Configuration params: ")
 
 	//interprete bbox parameter
-	bboxStruct, errBbox := getBbox(conf.Flighttracker.Bbox)
+	bboxStruct, errBbox := tools.GetBbox(conf.Flighttracker.Bbox)
 	if errBbox != nil {
 		log.WithContext(ctx).WithFields(logrus.Fields{
 			"Error": errBbox,
@@ -103,88 +92,38 @@ func Execute(ctx context.Context,
 	return nil
 }
 
-//TODO: handle how to handle signals
-func sigCatch(ctx context.Context, sinker app.Sinker, log *logrus.Logger) {
-
-	sigc := make(chan os.Signal, 1)
-	done := make(chan bool, 1)
-	signal.Notify(sigc,
-		syscall.SIGHUP,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-		syscall.SIGQUIT)
-	go func() {
-		s := <-sigc
-		log.WithContext(ctx).Info("Signal: " + s.String())
-		done <- true
-	}()
-
-	<-done
-}
-
-func ticking(ctx context.Context, refreshTime int, bbox Bbox, sinker app.Sinker, log *logrus.Logger) error {
+func ticking(ctx context.Context, refreshTime int, bbox tools.Bbox, sinker app.Sinker, log *logrus.Logger) error {
 	//Loop each <bbox parameter> secondes for working
 	d := time.Duration(refreshTime) * time.Second
 	ticker := time.NewTicker(d)
 
-	for x := range ticker.C {
-		//get Raw datas
-		rawData, errRaw := getRawData(ctx, bbox, log)
-		if errRaw != nil {
-			log.WithContext(ctx).WithFields(logrus.Fields{
-				"Error": errRaw,
-			}).Error("Unable to get Raw data")
-			return errRaw
-		}
-		errSink := sinker.Sink(ctx, x, rawData)
-		if errSink != nil {
-			log.WithContext(ctx).Error(errSink)
+	for {
+		select {
+		case <-ticker.C:
+			//get Raw datas
+			rawData, errRaw := getRawData(ctx, bbox, log)
+			if errRaw != nil {
+				log.WithContext(ctx).WithFields(logrus.Fields{
+					"Error": errRaw,
+				}).Error("Unable to get Raw data")
+				return errRaw
+			}
+			errSink := sinker.Sink(ctx, time.Now(), rawData)
+			if errSink != nil {
+				log.WithContext(ctx).Error(errSink)
+			}
+		case <-ctx.Done():
+			ticker.Stop()
+			log.WithContext(ctx).Info("Stop the ticker")
+			return nil
 		}
 	}
-
-	defer func() {
-		ticker.Stop()
-	}()
-
-	return nil
 }
 
-func getBbox(data string) (Bbox, error) {
-	sWnE := strings.Split(data, "^")
-	result := Bbox{}
-	if len(sWnE) != 2 {
-		return result, errors.New("Bounding Box malformed - need ^ for separating SW and NE coordinate")
-	}
-
-	for idx, latlonRec := range sWnE {
-		latlon := strings.Split(latlonRec, ",")
-		if len(latlon) != 2 {
-			return result, errors.New("Bounding Box malformed - need , for separating lat and lon coordinate")
-		}
-		lat, errLat := strconv.ParseFloat(latlon[0], 64)
-		if errLat != nil {
-			return result, errLat
-		}
-		lon, errLon := strconv.ParseFloat(latlon[1], 64)
-		if errLon != nil {
-			return result, errLon
-		}
-		if idx == 0 {
-			result.latSW = lat
-			result.lonSW = lon
-		} else {
-
-			result.latNE = lat
-			result.lonNE = lon
-		}
-	}
-	return result, nil
-}
-
-func getRawData(ctx context.Context, bbox Bbox, log *logrus.Logger) ([]app.FlightData, error) {
+func getRawData(ctx context.Context, bbox tools.Bbox, log *logrus.Logger) ([]app.FlightData, error) {
 	// Made the HTTP request - Test area 43.663712,1.570358,43.710510,1.700735
 	// Toulouse and Airport Area - 43.515693,1.318359,43.702630,1.687775
-	bounds := fmt.Sprintf("%.2f", bbox.latNE) + "," + fmt.Sprintf("%.2f", bbox.latSW) + "," + fmt.Sprintf("%.2f", bbox.lonSW) + "," + fmt.Sprintf("%.2f", bbox.lonNE)
+	bounds := fmt.Sprintf("%.2f", bbox.LatNE) + "," + fmt.Sprintf("%.2f", bbox.LatSW) + "," + fmt.Sprintf("%.2f", bbox.LonSW) + "," + fmt.Sprintf("%.2f", bbox.LonNE)
 	resp, errHTTPGet := http.Get("https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=" + bounds + "&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1")
 	if errHTTPGet != nil {
 		return nil, errHTTPGet
