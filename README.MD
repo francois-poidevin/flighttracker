@@ -1,12 +1,15 @@
 # Flight Tracker
 
-This app (under construction ...) is to track all aircrafts that passing onto a specified Bouding Box, store it, and alert an user if the flight doesn't respect flight rules
+This app is to track all aircrafts that passing onto a specified Bouding Box, store it, and alert an user if the flight doesn't respect flight rules
 
 ## Use cases
 - You think to buy a house, and you want to prevently check if your investissement will be under hight flight pressure
 - You want to know if a specific area have illegal flights (under altitude rules)
 
 ## Informations
+### French reglementation
+[Guide_autorisation_survol_basses_hauteurs](https://www.ecologie.gouv.fr/sites/default/files/Guide_autorisation_survol_basses_hauteurs.pdf)
+
 ### API feed
 
 - [current use] https://www.flightradar24.com (https://data-live.flightradar24.com/zones/fcgi/feed.js?bounds=43.79,43.53,1.23,2.03&faa=1&satellite=1&mlat=1&flarm=1&adsb=1&gnd=1&air=1&vehicles=1&estimated=1&maxage=14400&gliders=1&stats=1)
@@ -41,7 +44,7 @@ You can change the configuration file for specifying configuration
 ###############################
 [Flighttracker]
 
-  # tracking bbox
+  # tracking bbox (Lat/Lon)
   bbox = "43.52,1.32^43.70,1.69"
 
   # refresh timing
@@ -116,10 +119,41 @@ This sinker will create files on local folder where the application is running u
 #### DB
 ##### Pre-requisite
 
+###### Docker
 ```
 docker run -p 5432:5432 --name some-postgis -e POSTGRES_PASSWORD=mysecretpassword -d postgis/postgis
 ```
 
+Database is accessible at <YOUR_LOCAL_DOCKER_IP>:5432
+
+###### Local installation (Ubuntu 20.04)
+ * Step 1: Update system
+  ```shell
+  sudo apt update
+  sudo apt -y install vim bash-completion wget
+  sudo apt -y upgrade
+  sudo reboot
+  ```
+ * Step 2: Add PostgreSQL 12 repository
+  ```shell
+  wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+  echo "deb http://apt.postgresql.org/pub/repos/apt/ `lsb_release -cs`-pgdg main" |sudo tee  /etc/apt/sources.list.d/pgdg.list
+  ```
+ * Step 3: Install PostgreSQL 12
+  ```shell
+  sudo apt update
+  sudo apt -y install postgresql-12 postgresql-client-12
+  ```
+ * Step 4: Install Postgis extension
+  ```shell
+  sudo su - postgres
+  psql -d postgres
+  postgres=# CREATE EXTENSION postgis;
+  ```
+
+Database is accessible at 127.0.0.1:5432
+
+##### Informations
 This sinker will create a database structure in postgres database (schema and table)
 This sinker will store inbound data to postgres database
 
@@ -137,6 +171,7 @@ or
 ```bash
 docker run -v /home/poidevin/Projects/flighttracker/configlocal:/tmp flighttracker:latest start --config /tmp/config_flighttracker.toml
 ```
+then call the endpoint on docker container IP (i.e. 172.17.0.1:8080)
 
 ### startHttp service
 The _startHttp_ CLI service allow start a REST server on 8080 port to sink data in database (POSTGRES) and allow to request to the database
@@ -154,7 +189,7 @@ then call the endpoint on docker container IP (i.e. 172.17.0.1:8080)
 
 #### endpoints
 
-| enpoint        	| HTTP Methods           			| example           			|signification           			|
+| endpoint        	| HTTP Methods           			| example           			|signification           			|
 | ------------- 	|---------------   |---------------   |   ---------------|
 | /start | GET | localhost:8080/api/v1/start | to start the sinking service on database |
 | /stop | GET | localhost:8080/api/v1/stop | to stop the sinking service on database |
@@ -165,6 +200,7 @@ To start the sinking service on database
 
 ##### stop
 To stop the sinking service on database
+
 ##### search
 | path parameters        	| signification           			|
 |-----------------------  |------------------------------|
