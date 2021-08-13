@@ -104,13 +104,13 @@ func ticking(ctx context.Context, refreshTime int, bbox tools.Bbox, sinker app.S
 			rawData, errRaw := getRawData(ctx, bbox, log)
 			if errRaw != nil {
 				log.WithContext(ctx).WithFields(logrus.Fields{
-					"Error": errRaw,
-				}).Error("Unable to get Raw data")
-				return errRaw
-			}
-			errSink := sinker.Sink(ctx, time.Now(), rawData)
-			if errSink != nil {
-				log.WithContext(ctx).Error(errSink)
+					"Warning": errRaw,
+				}).Warning("Unable to get Raw data")
+			} else {
+				errSink := sinker.Sink(ctx, time.Now(), rawData)
+				if errSink != nil {
+					log.WithContext(ctx).Error(errSink)
+				}
 			}
 		case <-ctx.Done():
 			ticker.Stop()
@@ -131,6 +131,10 @@ func getRawData(ctx context.Context, bbox tools.Bbox, log *logrus.Logger) ([]app
 	defer func() {
 		resp.Body.Close()
 	}()
+
+	if resp.StatusCode != 200 {
+		return nil, errors.New(fmt.Sprintf("HTTP status code is : %d", resp.StatusCode))
+	}
 
 	body, errRead := ioutil.ReadAll(resp.Body)
 	if errRead != nil {
