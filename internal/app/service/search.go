@@ -27,7 +27,7 @@ func New(log *logrus.Logger) app.Service {
 	return &Service{Log: log}
 }
 
-func (s *Service) Search(ctx context.Context, params interface{}, bbox tools.Bbox, altThreshold int, fromTimeStamp, toTimeStamp time.Time) ([]app.FlightData, error) {
+func (s *Service) Search(ctx context.Context, params interface{}, bbox tools.Bbox, altThresholdFeet int, fromTimeStamp, toTimeStamp time.Time) ([]app.FlightData, error) {
 	//Do the search logical here
 	s.Log.WithContext(ctx).Info("Search service called")
 
@@ -46,7 +46,7 @@ func (s *Service) Search(ctx context.Context, params interface{}, bbox tools.Bbo
 
 	rows, errQuery := s.db.Query(selectSQLstmt,
 		tools.BboxToWKT(bbox),
-		altThreshold,
+		altThresholdFeet,
 		fromTimeStamp,
 		toTimeStamp,
 	)

@@ -32,6 +32,7 @@ type FlightData struct {
 
 const (
 	FEETTOMETER = 0.3048
+	METERTOFEET = 3.28084
 	KTSKMH      = 1.852
 )
 
@@ -41,5 +42,5 @@ type Sinker interface {
 }
 
 type Service interface {
-	Search(ctx context.Context, params interface{}, bbox tools.Bbox, altThreshold int, fromTimeStamp, toTimeStamp time.Time) ([]FlightData, error)
+	Search(ctx context.Context, params interface{}, bbox tools.Bbox, altThresholdFeet int, fromTimeStamp, toTimeStamp time.Time) ([]FlightData, error)
 }

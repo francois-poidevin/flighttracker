@@ -9,6 +9,7 @@ This app is to track all aircrafts that passing onto a specified Bouding Box, st
 ## Informations
 ### French reglementation
 [Guide_autorisation_survol_basses_hauteurs](https://www.ecologie.gouv.fr/sites/default/files/Guide_autorisation_survol_basses_hauteurs.pdf)
+[Definition - Unité urbaine / Agglomeration](https://www.insee.fr/fr/metadonnees/definition/c1501)
 
 ### API feed
 
@@ -164,7 +165,7 @@ The _start_ CLI service allow to sink data in differents sinkers has: STDOUT, FI
 
 Running flightTracker with default information of configuration file
 ```bash
-./bin/flighttracker start --config /configlocal/config_flighttracker.toml
+./bin/flighttracker start --config ./configlocal/config_flighttracker.toml
 ```
 or
 
@@ -178,7 +179,7 @@ The _startHttp_ CLI service allow start a REST server on 8080 port to sink data 
 
 Running flightTracker with default information of configuration file
 ```bash
-./bin/flighttracker startHttp --config /configlocal/config_flighttracker.toml
+./bin/flighttracker startHttp --config ./configlocal/config_flighttracker.toml
 ```
 or
 
@@ -193,7 +194,7 @@ then call the endpoint on docker container IP (i.e. 172.17.0.1:8080)
 | ------------- 	|---------------   |---------------   |   ---------------|
 | /start | GET | localhost:8080/api/v1/start | to start the sinking service on database |
 | /stop | GET | localhost:8080/api/v1/stop | to stop the sinking service on database |
-| /search | GET | localhost:8080/api/v1/search?bbox=43.52,1.32^43.70,1.69&altThreshold=500&fromTimeStamp=2021-07-22T09:00:00&toTimeStamp=2021-07-24T12:00:00 | to search data from database on several criteria as path parameters |
+| /search | GET | localhost:8080/api/v1/search?bbox=43.52,1.32^43.70,1.69&altThresholdFeet=500&fromTimeStamp=2021-07-22T09:00:00&toTimeStamp=2021-07-24T12:00:00 | to search data from database on several criteria as path parameters |
 
 ##### start
 To start the sinking service on database
@@ -205,7 +206,7 @@ To stop the sinking service on database
 | path parameters        	| signification           			|
 |-----------------------  |------------------------------|
 |         bbox                |  BoundingBox where analyse is done (Bottom Left-Top Right)                             |
-|       altThreshold          |   floor threshold for research. Only above and equals data will be returned                         |
+|       altThresholdFeet      |   floor threshold for research in Feet unit. Only above and equals data will be returned                         |
 |     fromTimeStamp           |  from time windows for search                             |
 |     toTimeStamp             |  to time windows for search                             |
 

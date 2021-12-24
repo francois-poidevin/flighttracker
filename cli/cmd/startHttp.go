@@ -137,7 +137,7 @@ func searchService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	//Check threshold parameter
-	altThresholdParam := query.Get("altThreshold")
+	altThresholdParam := query.Get("altThresholdFeet")
 	altThreshold, errAltThreshold := strconv.Atoi(altThresholdParam)
 	if errAltThreshold != nil {
 		w.WriteHeader(http.StatusBadRequest)

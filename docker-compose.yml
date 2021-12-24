@@ -1,0 +1,12 @@
+version: "3.9"
+services:
+  flighttracker:
+    build: .
+    ports:
+      - 8080:8080
+  postgis:
+    image: postgis/postgis
+    environment: 
+      - POSTGRES_PASSWORD=mysecretpassword
+    ports:
+      - 5432:5432
